@@ -16,23 +16,34 @@ try {
   let content = fs.readFileSync(providersPath, 'utf8');
   let processedContent = content;
   
-  // 处理单个变量 HEBEOPENAI
+  // 处理单个变量 HEBEOPENAI (在数组中)
   if (process.env.HEBEOPENAI) {
-    processedContent = processedContent.replace(/【变量:HEBEOPENAI】/g, process.env.HEBEOPENAI);
+    // 替换数组中的占位符
+    processedContent = processedContent.replace(/\["【变量:HEBEOPENAI】"\]/g, `["${process.env.HEBEOPENAI}"]`);
+    // 也处理可能的字符串形式
+    processedContent = processedContent.replace(/"【变量:HEBEOPENAI】"/g, `"${process.env.HEBEOPENAI}"`);
     console.log('[Build Config] ✓ Replaced HEBEOPENAI');
   } else {
-    // 如果没有环境变量，保持原样但记录警告
-    console.warn('[Build Config] ⚠ HEBEOPENAI environment variable not found');
+    // 如果没有环境变量，使用占位符
+    processedContent = processedContent.replace(/\["【变量:HEBEOPENAI】"\]/g, '["HEBEOPENAI"]');
+    processedContent = processedContent.replace(/"【变量:HEBEOPENAI】"/g, '"HEBEOPENAI"');
+    console.warn('[Build Config] ⚠ HEBEOPENAI environment variable not found, using placeholder');
   }
   
   // 处理逗号分开的变量 HEBEDEEP
   if (process.env.HEBEDEEP) {
     const keys = process.env.HEBEDEEP.split(',').map(key => key.trim());
     const keysArray = JSON.stringify(keys);
-    processedContent = processedContent.replace(/【逗号分开变量:HEBEDEEP】/g, keysArray);
+    // 替换数组中的占位符
+    processedContent = processedContent.replace(/\["【逗号分开变量:HEBEDEEP】"\]/g, keysArray);
+    // 也处理可能的字符串形式
+    processedContent = processedContent.replace(/"【逗号分开变量:HEBEDEEP】"/g, `"${process.env.HEBEDEEP}"`);
     console.log('[Build Config] ✓ Replaced HEBEDEEP with', keys.length, 'keys');
   } else {
-    console.warn('[Build Config] ⚠ HEBEDEEP environment variable not found');
+    // 如果没有环境变量，使用占位符
+    processedContent = processedContent.replace(/\["【逗号分开变量:HEBEDEEP】"\]/g, '["HEBEDEEP"]');
+    processedContent = processedContent.replace(/"【逗号分开变量:HEBEDEEP】"/g, '"HEBEDEEP"');
+    console.warn('[Build Config] ⚠ HEBEDEEP environment variable not found, using placeholder');
   }
   
   // 保存到public目录，这样运行时就能访问到
@@ -44,19 +55,9 @@ try {
   fs.writeFileSync(path.join(publicDir, 'providers-config.json'), processedContent);
   console.log('[Build Config] ✓ Generated public/providers-config.json');
   
-  // 生成TypeScript模块，将环境变量替换为实际值
-  let tsContent = processedContent;
-  
-  // 对于TypeScript文件，如果没有环境变量，则使用变量名作为占位符
-  if (!process.env.HEBEOPENAI) {
-    tsContent = tsContent.replace(/【变量:HEBEOPENAI】/g, 'HEBEOPENAI');
-  }
-  if (!process.env.HEBEDEEP) {
-    tsContent = tsContent.replace(/【逗号分开变量:HEBEDEEP】/g, '"HEBEDEEP"');
-  }
-  
+  // 生成TypeScript模块
   const jsContent = `// Auto-generated configuration - DO NOT EDIT
-export const PREBUILT_PROVIDERS = ${tsContent};
+export const PREBUILT_PROVIDERS = ${processedContent};
 `;
   
   const srcDir = path.join(process.cwd(), 'app', 'config');

@@ -29,7 +29,7 @@ export const PREBUILT_PROVIDERS = [
       }
     ],
     "status": "active",
-    "enableKeyList": "HEBEOPENAI",
+    "enableKeyList": ["HEBEOPENAI"],
     "disableKeyList": [],
     "testModel": "gpt-4o-mini",
     "paths": {}
@@ -79,7 +79,7 @@ export const PREBUILT_PROVIDERS = [
       }
     ],
     "status": "active",
-    "enableKeyList": "HEBEDEEP",
+    "enableKeyList": ["HEBEDEEP"],
     "disableKeyList": [],
     "testModel": "Qwen/Qwen2.5-7B-Instruct",
     "paths": {}

@@ -158,7 +158,7 @@
       }
     ],
     "status": "active",
-    "enableKeyList": "【变量:HEBEOPENAI】",
+    "enableKeyList": ["【变量:HEBEOPENAI】"],
     "disableKeyList": [],
     "testModel": "gpt-4o-mini",
     "paths": {}
@@ -248,7 +248,7 @@
       }
     ],
     "status": "active",
-    "enableKeyList": "【逗号分开变量:HEBEDEEP】",
+    "enableKeyList": ["【逗号分开变量:HEBEDEEP】"],
     "disableKeyList": [],
     "testModel": "Qwen/Qwen2.5-7B-Instruct",
     "paths": {}
