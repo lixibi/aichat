@@ -20,6 +20,36 @@
   line-height: 1.5;
 }
 
+.auto-import-section {
+  margin: 16px 0;
+}
+
+.highlight-box {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  color: white;
+  text-align: center;
+}
+
+.highlight-box h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.highlight-box p {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+.manual-setup-section {
+  margin: 16px 0;
+}
+
 .guide-steps {
   margin: 20px 0;
   border-left: 2px solid var(--border-color);
@@ -96,6 +126,35 @@
   gap: 12px;
 }
 
+.auto-import-btn {
+  width: 100%;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transition: all 0.3s;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.auto-import-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.auto-import-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .primary-btn {
   width: 100%;
   padding: 12px 16px;
@@ -148,5 +207,9 @@
   .security-note strong,
   .security-note p {
     color: #93c5fd;
+  }
+
+  .highlight-box {
+    background: linear-gradient(135deg, #4c1d95 0%, #312e81 100%);
   }
 }
