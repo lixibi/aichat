@@ -138,11 +138,19 @@ const pt: PartialLocaleType = {
         Action: "Resetar",
         Confirm: "Confirmar para resetar todas as configurações para o padrão?",
       },
-      Clear: {
-        Title: "Limpar Todos os Dados",
-        SubTitle: "Limpar todas as mensagens e configurações",
-        Action: "Limpar",
-        Confirm: "Confirmar para limpar todas as mensagens e configurações?",
+      ClearChat: {
+        Title: "Limpar Dados do Chat",
+        SubTitle: "Limpar todos os dados do chat (exceto configurações)",
+        Action: "Limpar Agora",
+        Confirm: "Tem certeza de que deseja limpar todos os dados do chat?",
+      },
+      ClearALL: {
+        Title: "Limpar Todos os Dados e Configurações",
+        SubTitle:
+          "Limpar todos os dados e configurações do chat, retornando ao estado inicial",
+        Action: "Limpar Tudo",
+        Confirm:
+          "Tem certeza de que deseja limpar todos os dados e configurações do chat?",
       },
     },
     Lang: {

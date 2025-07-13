@@ -2,7 +2,6 @@ import path from "path";
 
 export const OWNER = "QAbot-zh";
 export const REPO = "ChatGPT-Next-Web";
-export const FAKE_OPENAI_URL = "https://new.oaifree.com";
 export const REPO_URL = `https://github.com/${OWNER}/${REPO}`;
 export const ISSUE_URL = `https://github.com/${OWNER}/${REPO}/issues`;
 export const UPDATE_URL = `${REPO_URL}#keep-updated`;
@@ -20,6 +19,8 @@ export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/";
 export const CACHE_URL_PREFIX = "/api/cache";
 export const UPLOAD_URL = `${CACHE_URL_PREFIX}/upload`;
 
+export const THEME_REPO_URL = "https://nextchat-theme.pages.dev/";
+
 export enum Path {
   Home = "/",
   Chat = "/chat",
@@ -30,6 +31,7 @@ export enum Path {
   SearchChat = "/search-chat",
   CloudBackup = "/cloud-backup",
   Artifacts = "/artifacts",
+  CustomProvider = "/custom-provider",
 }
 
 export enum ApiPath {
@@ -58,6 +60,10 @@ export enum StoreKey {
   Prompt = "prompt-store",
   Update = "chat-update",
   Sync = "sync",
+  CustomProvider = "custom-providers-store",
+  TaskModelConfig = "task-model-config",
+  ExpansionRules = "expansion-rules",
+  CustomCSS = "custom-css",
 }
 
 export const DEFAULT_SIDEBAR_WIDTH = 300;
@@ -75,6 +81,23 @@ export const STORAGE_KEY = "chatgpt-next-web";
 export const REQUEST_TIMEOUT_MS = 60000;
 
 export const EXPORT_MESSAGE_CLASS_NAME = "export-markdown";
+
+export enum ThinkingType {
+  Unknown = -1, // 未知状态
+  ReasoningType = 0, // 推理内容
+  ThinkType = 1, // <think> 类型
+  ReferenceType = 2, // > 引用类型
+  MaybeNotThink = 3, // 非思考模式或丢失<think>模式
+}
+export const ThinkingTypeMap = Object.entries(ThinkingType).reduce(
+  (acc, [key, value]) => {
+    if (!isNaN(Number(value))) {
+      acc[value as number] = key;
+    }
+    return acc;
+  },
+  {} as Record<number, string>,
+);
 
 export enum ServiceProvider {
   OpenAI = "OpenAI",
@@ -151,49 +174,53 @@ export const KnowledgeCutOffDate: Record<string, string> = {
   "o1-preview": "2023-10",
   // After improvements,
   // it's now easier to add "KnowledgeCutOffDate" instead of stupid hardcoding it, as was done previously.
-  "gemini-pro": "2023-12",
-  "gemini-pro-vision": "2023-12",
 };
 
 export const DEFAULT_TTS_ENGINE = "OpenAI-TTS";
 export const DEFAULT_TTS_ENGINES = ["OpenAI-TTS", "Edge-TTS"];
-export const DEFAULT_TTS_MODEL = "tts-1";
+export const DEFAULT_TTS_MODEL = "gpt-4o-mini-tts";
 export const DEFAULT_TTS_VOICE = "alloy";
-export const DEFAULT_TTS_MODELS = ["tts-1", "tts-1-hd"];
+export const DEFAULT_TTS_MODELS = ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"];
 export const DEFAULT_TTS_VOICES = [
   "alloy",
+  "ash",
+  "ballad",
+  "coral",
   "echo",
   "fable",
   "onyx",
   "nova",
+  "sage",
   "shimmer",
+  "verse",
 ];
 
 export const VISION_MODEL_REGEXES = [
   /vision/,
   /gpt-4o/,
+  /gpt-4.1/,
   /claude-3/,
   /gemini-1\.5/,
   /gemini-exp/,
-  /gemini-2\.0/,
+  /gemini-2/,
   /learnlm/,
   /qwen-vl/,
   /qwen2-vl/,
   /gpt-4-turbo(?!.*preview)/, // Matches "gpt-4-turbo" but not "gpt-4-turbo-preview"
+  /gpt-4.5/,
   /^dall-e-3$/, // Matches exactly "dall-e-3"
   /glm-4v/,
   /vl/i,
   /pixtral/,
   /kimi-latest/,
+  /multimodal/,
+  /llama-4/,
 ];
 
 export const EXCLUDE_VISION_MODEL_REGEXES = [/claude-3-5-haiku-20241022/];
 
 const openaiModels = [
   "chatgpt-4o-latest",
-  "gpt-3.5-turbo",
-  "gpt-3.5-turbo-1106",
-  "gpt-3.5-turbo-0125",
   "gpt-4o",
   "gpt-4o-2024-05-13",
   "gpt-4o-2024-08-06",
@@ -210,21 +237,11 @@ const openaiModels = [
   "gpt-4-turbo-2024-04-09",
   "gpt-4-turbo-preview",
   "gpt-4-vision-preview",
-  // 非流模型
+  "gpt-4.5-preview",
   "o1-mini",
   "o1-preview",
-  // 非标准模型
-  "o1",
-  "o1-all",
+  "o3-mini",
   "o1-pro",
-  "o1-pro-all",
-  "gpt-4o-plus",
-  "gpt-4o-all",
-  "gpt-o1-mini",
-  "gpt-o1-preview",
-  "gpt-o1",
-  "gpt-o1-pro",
-  "gpt-4-all",
 ];
 
 const googleModels = [
@@ -245,9 +262,6 @@ const googleModels = [
 ];
 
 const anthropicModels = [
-  "claude-instant-1.2",
-  "claude-2.0",
-  "claude-2.1",
   "claude-3-haiku-20240307",
   "claude-3-5-haiku-20241022",
   "claude-3-5-haiku-latest",
@@ -302,6 +316,113 @@ export const internalAllowedWebDavEndpoints = [
   "https://dav.idrivesync.com",
   "https://webdav.yandex.com",
   "https://app.koofr.net/dav/Koofr",
+  "https://domi.teracloud.jp/dav",
 ];
 
 export const PLUGINS = [{ name: "Search Chat", path: Path.SearchChat }];
+
+export const textFileExtensions = [
+  "txt",
+  "md",
+  "markdown",
+  "json",
+  "csv",
+  "tsv",
+  "xml",
+  "html",
+  "htm",
+  "css",
+  "js",
+  "ts",
+  "jsx",
+  "tsx",
+  "py",
+  "java",
+  "c",
+  "cpp",
+  "h",
+  "cs",
+  "php",
+  "rb",
+  "go",
+  "rs",
+  "swift",
+  "kt",
+  "sql",
+  "yaml",
+  "yml",
+  "toml",
+  "ini",
+  "cfg",
+  "conf",
+  "log",
+  "sh",
+  "bat",
+  "ps1",
+  "tex",
+  "rtf",
+  "scss",
+  "sass",
+  "less",
+  "vue",
+  "svelte",
+  "graphql",
+  "gql",
+  "r",
+  "pl",
+  "pm",
+  "lua",
+  "groovy",
+  "scala",
+  "dart",
+  "haskell",
+  "hs",
+  "clj",
+  "erl",
+  "ex",
+  "exs",
+  "jsp",
+  "asp",
+  "aspx",
+  "pug",
+  "jade",
+  "ejs",
+  "diff",
+  "patch",
+  "properties",
+  "env",
+  "plist",
+  "proto",
+  "gradle",
+  "rake",
+  "htaccess",
+  "htpasswd",
+  "dockerfile",
+  "dockerignore",
+  "gitignore",
+  "gitattributes",
+  "eslintrc",
+  "prettierrc",
+  "babelrc",
+  "stylelintrc",
+  "cmake",
+  "makefile",
+  "vbs",
+  "vbe",
+  "rst",
+  "adoc",
+  "srt",
+  "vtt",
+  "docx",
+  "doc",
+  "pptx",
+  "ppt",
+  "pdf",
+  "xlsx",
+  "xls",
+  "zip",
+];
+
+export const MAX_DOC_CNT = 6; // 一次性支持上传的文件数量
+export const maxFileSizeInKB = 1024 * 5; // 1 MB
+export const minTokensForPastingAsFile = 4096; // 超过4k个token的文本粘贴为附件文件

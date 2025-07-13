@@ -46,7 +46,7 @@
     .step {
       flex-grow: 1;
       padding: 5px 10px;
-      font-size: 14px;
+      font-size: var(--text-sm);
       color: var(--black);
       opacity: 0.5;
       transition: all ease 0.3s;
@@ -75,13 +75,13 @@
         border-radius: 6px;
         display: inline-block;
         padding: 0px 5px;
-        font-size: 12px;
+        font-size: var(--text-xs);
         margin-right: 8px;
         opacity: 0.8;
       }
 
       .step-name {
-        font-size: 12px;
+        font-size: var(--text-xs);
       }
     }
   }
@@ -137,12 +137,12 @@
       }
 
       .main-title {
-        font-size: 20px;
+        font-size: var(--text-xl);
         font-weight: bolder;
       }
 
       .sub-title {
-        font-size: 12px;
+        font-size: var(--text-xs);
       }
 
       .icons {
@@ -151,7 +151,7 @@
         align-items: center;
 
         .icon-space {
-          font-size: 12px;
+          font-size: var(--text-xs);
           margin: 0 10px;
           font-weight: bolder;
           color: var(--primary);
@@ -159,7 +159,7 @@
       }
 
       .chat-info-item {
-        font-size: 12px;
+        font-size: var(--text-xs);
         color: var(--primary);
         padding: 2px 15px;
         border-radius: 10px;

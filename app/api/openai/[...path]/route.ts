@@ -27,15 +27,18 @@ function getModels(remoteModelRes: OpenAIListModelResponse) {
 
 async function handle(
   req: NextRequest,
-  { params }: { params: { path: string[] } },
+  // { params }: { params: { path: string[] } },
 ) {
-  console.log("[OpenAI Route] params ", params);
+  // console.log("[OpenAI Route] params ", params);
 
   if (req.method === "OPTIONS") {
     return NextResponse.json({ body: "OK" }, { status: 200 });
   }
 
-  const subpath = params.path.join("/");
+  // Extract path from URL
+  const pathParts = req.nextUrl.pathname.split("/");
+  const subpath = pathParts.slice(3).join("/");
+  // const subpath = params.path.join("/");
 
   if (!ALLOWD_PATH.has(subpath)) {
     console.log("[OpenAI Route] forbidden path ", subpath);

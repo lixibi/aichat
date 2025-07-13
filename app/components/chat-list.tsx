@@ -1,4 +1,6 @@
 import DeleteIcon from "../icons/delete.svg";
+import PinIcon from "../icons/pin.svg";
+import UnpinIcon from "../icons/unpin.svg";
 
 import styles from "./home.module.scss";
 import {
@@ -22,6 +24,8 @@ import { useMobileScreen } from "../utils";
 export function ChatItem(props: {
   onClick?: () => void;
   onDelete?: () => void;
+  onPin?: () => void;
+  onUnpin?: () => void;
   title: string;
   count: number;
   time: string;
@@ -30,6 +34,7 @@ export function ChatItem(props: {
   index: number;
   narrow?: boolean;
   mask: Mask;
+  pinned?: boolean;
 }) {
   const draggableRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -49,7 +54,7 @@ export function ChatItem(props: {
             props.selected &&
             (currentPath === Path.Chat || currentPath === Path.Home) &&
             styles["chat-item-selected"]
-          }`}
+          } ${props.pinned ? styles["chat-item-pinned"] : ""}`}
           onClick={props.onClick}
           ref={(ele) => {
             draggableRef.current = ele;
@@ -84,7 +89,6 @@ export function ChatItem(props: {
               </div>
             </>
           )}
-
           <div
             className={styles["chat-item-delete"]}
             onClickCapture={(e) => {
@@ -95,6 +99,22 @@ export function ChatItem(props: {
           >
             <DeleteIcon />
           </div>
+          <div
+            className={
+              styles["chat-item-pin"] +
+              " " +
+              (props.narrow
+                ? styles["chat-item-pin-narrow"]
+                : styles["chat-item-pin-expanded"])
+            }
+            onClickCapture={(e) => {
+              props.pinned ? props.onUnpin?.() : props.onPin?.();
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            {props.pinned ? <UnpinIcon /> : <PinIcon />}
+          </div>
         </div>
       )}
     </Draggable>
@@ -102,17 +122,30 @@ export function ChatItem(props: {
 }
 
 export function ChatList(props: { narrow?: boolean }) {
-  const [sessions, selectedIndex, selectSession, moveSession] = useChatStore(
-    (state) => [
-      state.sessions,
-      state.currentSessionIndex,
-      state.selectSession,
-      state.moveSession,
-    ],
-  );
+  const [
+    sessions,
+    selectedIndex,
+    selectSession,
+    moveSession,
+    pinSession,
+    unpinSession,
+  ] = useChatStore((state) => [
+    state.sessions,
+    state.currentSessionIndex,
+    state.selectSession,
+    state.moveSession,
+    state.pinSession,
+    state.unpinSession,
+  ]);
   const chatStore = useChatStore();
   const navigate = useNavigate();
   const isMobileScreen = useMobileScreen();
+
+  const sortedSessions = sessions.slice().sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
+    return b.lastUpdate - a.lastUpdate; // 按最后更新时间降序排列
+  });
 
   const onDragEnd: OnDragEndResponder = (result) => {
     const { destination, source } = result;
@@ -139,7 +172,7 @@ export function ChatList(props: { narrow?: boolean }) {
             ref={provided.innerRef}
             {...provided.droppableProps}
           >
-            {sessions.map((item, i) => (
+            {sortedSessions.map((item, i) => (
               <ChatItem
                 title={item.topic}
                 time={new Date(item.lastUpdate).toLocaleString()}
@@ -147,18 +180,25 @@ export function ChatList(props: { narrow?: boolean }) {
                 key={item.id}
                 id={item.id}
                 index={i}
-                selected={i === selectedIndex}
+                selected={sessions.indexOf(item) === selectedIndex}
+                pinned={item.pinned}
                 onClick={() => {
                   navigate(Path.Chat);
-                  selectSession(i);
+                  selectSession(sessions.indexOf(item));
                 }}
                 onDelete={async () => {
                   if (
                     (!props.narrow && !isMobileScreen) ||
                     (await showConfirm(Locale.Home.DeleteChat))
                   ) {
-                    chatStore.deleteSession(i);
+                    chatStore.deleteSession(sessions.indexOf(item));
                   }
+                }}
+                onPin={() => {
+                  pinSession(sessions.indexOf(item));
+                }}
+                onUnpin={() => {
+                  unpinSession(sessions.indexOf(item));
                 }}
                 narrow={props.narrow}
                 mask={item.mask}

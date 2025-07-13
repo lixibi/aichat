@@ -6,7 +6,8 @@ import { useState, useEffect } from "react";
 
 import styles from "./home.module.scss";
 
-import BotIcon from "../icons/bot.svg";
+// import BotIcon from "../icons/bot.svg";
+import AILogoIcon from "../icons/ai-logo.svg";
 import LoadingIcon from "../icons/three-dots.svg";
 
 import { getCSSVar, useMobileScreen } from "../utils";
@@ -30,11 +31,13 @@ import { getClientConfig } from "../config/client";
 import { ClientApi } from "../client/api";
 import { useAccessStore } from "../store";
 import { identifyDefaultClaudeModel } from "../utils/checkers";
+import { FloatingButton } from "./floating-button";
+import { CustomCssProvider } from "./CustomCssProvider";
 
 export function Loading(props: { noLogo?: boolean }) {
   return (
     <div className={styles["loading-content"] + " no-dark"}>
-      {!props.noLogo && <BotIcon />}
+      {!props.noLogo && <AILogoIcon />}
       <LoadingIcon />
     </div>
   );
@@ -55,6 +58,13 @@ const Chat = dynamic(async () => (await import("./chat")).Chat, {
 const NewChat = dynamic(async () => (await import("./new-chat")).NewChat, {
   loading: () => <Loading noLogo />,
 });
+
+const CustomProvider = dynamic(
+  async () => (await import("./custom-provider")).CustomProvider,
+  {
+    loading: () => <Loading noLogo />,
+  },
+);
 
 const CloudBackup = dynamic(
   async () => (await import("./cloud-backup")).CloudBackupPage,
@@ -101,6 +111,12 @@ export function useSwitchTheme() {
       const themeColor = getCSSVar("--theme-color");
       metaDescriptionDark?.setAttribute("content", themeColor);
       metaDescriptionLight?.setAttribute("content", themeColor);
+    }
+
+    // 更新自定义CSS的主题属性
+    const customCssElem = document.getElementById("custom-css");
+    if (customCssElem) {
+      customCssElem.setAttribute("data-theme", config.theme);
     }
   }, [config.theme]);
 }
@@ -188,6 +204,10 @@ function Screen() {
               <Route path={Path.CloudBackup} element={<CloudBackup />} />
               <Route path={Path.Chat} element={<Chat />} />
               <Route path={Path.Settings} element={<Settings />} />
+              <Route
+                path={`${Path.CustomProvider}/:providerId?`}
+                element={<CustomProvider />}
+              />
             </Routes>
           </div>
         </>
@@ -233,7 +253,9 @@ export function Home() {
   return (
     <ErrorBoundary>
       <Router>
+        <CustomCssProvider />
         <Screen />
+        <FloatingButton />
       </Router>
     </ErrorBoundary>
   );

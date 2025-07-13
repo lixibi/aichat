@@ -1,55 +1,401 @@
-import { ServiceProvider } from "@/app/constant";
-import { ModalConfigValidator, ModelConfig } from "../store";
+import { ServiceProvider, StoreKey } from "@/app/constant";
+import { ModalConfigValidator, ModelConfig, useAccessStore } from "../store";
 
 import Locale from "../locales";
 import { InputRange } from "./input-range";
 import { ListItem, Select } from "./ui-lib";
-import { useAllModels } from "../utils/hooks";
+import { useAllModelsWithCustomProviders } from "../utils/hooks";
 import { groupBy } from "lodash-es";
+import { useState, useEffect } from "react";
+import { Model } from "../client/api";
 
+function findMatchingProvider(
+  model: string,
+  providername: string,
+  groupModels: Record<string, any[]>,
+): string {
+  // 1. 首先尝试直接匹配providername
+  if (groupModels[providername]) {
+    // 检查这个provider下是否有匹配的model
+    const hasMatchingModel = groupModels[providername].some(
+      (m) => m.name === model || m.displayName === model,
+    );
+    if (hasMatchingModel) {
+      return providername;
+    }
+  }
+
+  // 2. 尝试用model名称作为providername
+  if (groupModels[model]) {
+    return model;
+  }
+
+  // 3. 遍历所有groupModels查找匹配的model
+  for (const [providerKey, models] of Object.entries(groupModels)) {
+    if (models.some((m) => m.name === model || m.displayName === model)) {
+      return providerKey;
+    }
+  }
+
+  // 4. 如果都没找到，返回原始providername
+  return providername;
+}
+function isModelAvailable(
+  model: string,
+  providerName: string,
+  allModels: Model[],
+): boolean {
+  const modelInfo = allModels.find(
+    (m) => m.name === model && m.provider?.providerName === providerName,
+  );
+  return modelInfo ? modelInfo.available : false;
+}
 export function ModelConfigList(props: {
   modelConfig: ModelConfig;
   updateConfig: (updater: (config: ModelConfig) => void) => void;
 }) {
-  // const { compressModel } = useAccessStore();
-  // let [compressModelName, compressModelProviderName] = compressModel.split(/@(?=[^@]*$)/);
-  // compressModelProviderName = compressModelProviderName || compressModelName || "OpenAI";
-  // const compressModelObj = {
-  //   name: compressModelName,
-  //   displayName: compressModelName,
-  //   available: !!compressModelName,
-  //   provider: {
-  //     id: compressModelProviderName.toLowerCase(),
-  //     providerName: compressModelProviderName,
-  //     providerType: compressModelProviderName.toLowerCase(),
-  //   },
-  // }
-
-  const allModels = useAllModels();
+  const allModels = useAllModelsWithCustomProviders();
   const groupModels = groupBy(
     allModels.filter((v) => v.available),
     "provider.providerName",
   );
-  const value = `${props.modelConfig.model}@${props.modelConfig?.providerName}`;
+  // const value = `${props.modelConfig.model}@${props.modelConfig?.providerName}`;
   // let compressModelValue = compressModel ?
   //   `${compressModelName}@${compressModelProviderName}` :
   //   `${props.modelConfig.compressModel}@${props.modelConfig?.compressProviderName}`;
-  // console.log("compressModelValue", compressModelValue);
+  // console.log("[model-config] compressModelValue", compressModelValue);
+
+  const accessStore = useAccessStore();
+  // 创建状态变量来存储模型值
+  const [chatModelValue, setChatModelValue] = useState<string>(
+    props.modelConfig.model,
+  );
+  const [compressModelValue, setCompressModelValue] = useState<string>(
+    props.modelConfig.compressModel,
+  );
+  const [textProcessModelValue, setTextProcessModelValue] = useState<string>(
+    props.modelConfig.textProcessModel,
+  );
+  const [ocrModelValue, setOcrModelValue] = useState<string>(
+    props.modelConfig.ocrModel,
+  );
+
+  useEffect(() => {
+    const [chatModel, chatProviderName] = chatModelValue.split(/@(?=[^@]*$)/);
+    const matchedChatProviderName = findMatchingProvider(
+      chatModel,
+      chatProviderName,
+      groupModels,
+    );
+    props.updateConfig((config) => {
+      config.model = ModalConfigValidator.model(chatModel);
+      config.providerName = matchedChatProviderName as ServiceProvider;
+    });
+    setChatModelValue(`${chatModel}@${matchedChatProviderName}`);
+
+    const [compressModel, compressProviderName] =
+      compressModelValue.split(/@(?=[^@]*$)/);
+    const matchedCompressProviderName = findMatchingProvider(
+      compressModel,
+      compressProviderName,
+      groupModels,
+    );
+    props.updateConfig((config) => {
+      config.compressModel = ModalConfigValidator.model(compressModel);
+      config.compressProviderName =
+        matchedCompressProviderName as ServiceProvider;
+    });
+    setCompressModelValue(`${compressModel}@${matchedCompressProviderName}`);
+
+    const [ocrModel, ocrProviderName] = ocrModelValue.split(/@(?=[^@]*$)/);
+    const matchedOcrProviderName = findMatchingProvider(
+      ocrModel,
+      ocrProviderName,
+      groupModels,
+    );
+    props.updateConfig((config) => {
+      config.ocrModel = ModalConfigValidator.model(ocrModel);
+      config.ocrProviderName = matchedOcrProviderName as ServiceProvider;
+    });
+    setOcrModelValue(`${ocrModel}@${matchedOcrProviderName}`);
+
+    const [textProcessModel, textProcessProviderName] =
+      textProcessModelValue.split(/@(?=[^@]*$)/);
+    const matchedTextProcessProviderName = findMatchingProvider(
+      textProcessModel,
+      textProcessProviderName,
+      groupModels,
+    );
+    props.updateConfig((config) => {
+      config.textProcessModel = ModalConfigValidator.model(textProcessModel);
+      config.textProcessProviderName =
+        matchedTextProcessProviderName as ServiceProvider;
+    });
+    setTextProcessModelValue(
+      `${textProcessModel}@${matchedTextProcessProviderName}`,
+    );
+  }, []);
+  // 在组件挂载时初始化
+  // useEffect(() => {
+  //   // 获取存储的配置
+  //   const storedConfigs = getStoredModelConfigs();
+  //   // 处理聊天模型
+  //   let useStoreChatModel = false;
+  //   if (storedConfigs.chatModel) {
+  //     // 如果已有存储的值，使用它
+  //     // setChatModelValue(storedConfigs.chatModel);
+  //     const [model, providerName] = storedConfigs.chatModel.split("@");
+  //     if (!isModelAvailable(model, providerName, allModels)) {
+  //       console.warn(
+  //         `chatModel ${model} with provider ${providerName} is not available.`,
+  //       );
+  //     } else {
+  //       useStoreChatModel = true;
+  //     }
+  //   }
+  //   if (useStoreChatModel) {
+  //     const [model, providerName] = storedConfigs.chatModel.split("@");
+  //     const matchedProviderName = findMatchingProvider(
+  //       model,
+  //       providerName,
+  //       groupModels,
+  //     );
+  //     props.updateConfig((config) => {
+  //       config.model = ModalConfigValidator.model(model);
+  //       config.providerName = matchedProviderName as ServiceProvider;
+  //     });
+  //     setChatModelValue(`${model}@${matchedProviderName}`);
+  //   } else {
+  //     // 否则使用props中的默认值
+  //     const model = props.modelConfig.model;
+  //     const providername = props.modelConfig.providerName;
+
+  //     // 使用辅助函数查找匹配的providername
+  //     const matchedProviderName = findMatchingProvider(
+  //       model,
+  //       providername,
+  //       groupModels,
+  //     );
+
+  //     const value = `${model}@${matchedProviderName}`;
+  //     setChatModelValue(value);
+  //     saveModelConfig("chatModel", value);
+  //     console.log("[model-config] change chatModel: ", value);
+
+  //     // 如果匹配的providername与原始不同，更新配置
+  //     if (matchedProviderName !== providername) {
+  //       props.updateConfig((config) => {
+  //         config.providerName = matchedProviderName as ServiceProvider;
+  //       });
+  //     }
+  //   }
+
+  //   // 处理压缩模型
+  //   let useStoreCompressModel = false;
+  //   if (storedConfigs.compressModel) {
+  //     // setCompressModelValue(storedConfigs.compressModel);
+  //     const [model, providerName] = storedConfigs.compressModel.split("@");
+  //     if (!isModelAvailable(model, providerName, allModels)) {
+  //       console.warn(
+  //         `compressModel ${model} with provider ${providerName} is not available.`,
+  //       );
+  //     } else {
+  //       useStoreCompressModel = true;
+  //     }
+  //   }
+  //   if (useStoreCompressModel) {
+  //     const [model, providerName] = storedConfigs.compressModel.split("@");
+  //     const matchedProviderName = findMatchingProvider(
+  //       model,
+  //       providerName,
+  //       groupModels,
+  //     );
+  //     props.updateConfig((config) => {
+  //       config.compressModel = ModalConfigValidator.model(model);
+  //       config.compressProviderName = matchedProviderName as ServiceProvider;
+  //     });
+  //     setCompressModelValue(`${model}@${matchedProviderName}`);
+  //   } else {
+  //     // 使用accessStore中的值或props中的默认值
+  //     let model = props.modelConfig.compressModel;
+  //     let providerName = props.modelConfig.compressProviderName;
+
+  //     // 如果accessStore中有值，优先使用
+  //     if (accessStore.compressModel) {
+  //       const parts = accessStore.compressModel.split("@");
+  //       if (parts.length > 0) {
+  //         model = parts[0];
+  //         if (parts.length > 1) {
+  //           providerName = parts[1] as ServiceProvider;
+  //         }
+  //       }
+  //     }
+  //     const matchedProviderName = findMatchingProvider(
+  //       model,
+  //       providerName,
+  //       groupModels,
+  //     );
+
+  //     const value = `${model}@${matchedProviderName}`;
+  //     setCompressModelValue(value);
+  //     saveModelConfig("compressModel", value);
+  //     console.log("[model-config] change compressModel: ", value);
+
+  //     // 更新配置
+  //     props.updateConfig((config) => {
+  //       config.compressModel = ModalConfigValidator.model(model);
+  //       config.compressProviderName = matchedProviderName as ServiceProvider;
+  //     });
+  //   }
+
+  //   // 处理翻译模型
+  //   let useStoreTextProcessModel = false;
+  //   if (storedConfigs.textProcessModel) {
+  //     // setTranslateModelValue(storedConfigs.translateModel);
+  //     const [model, providerName] = storedConfigs.textProcessModel.split("@");
+  //     if (!isModelAvailable(model, providerName, allModels)) {
+  //       console.warn(
+  //         `textProcessModel ${model} with provider ${providerName} is not available.`,
+  //       );
+  //     } else {
+  //       useStoreTextProcessModel = true;
+  //     }
+  //   }
+  //   if (useStoreTextProcessModel) {
+  //     const [model, providerName] = storedConfigs.textProcessModel.split("@");
+  //     const matchedProviderName = findMatchingProvider(
+  //       model,
+  //       providerName,
+  //       groupModels,
+  //     );
+  //     props.updateConfig((config) => {
+  //       config.textProcessModel = ModalConfigValidator.model(model);
+  //       config.textProcessProviderName = matchedProviderName as ServiceProvider;
+  //     });
+  //     setTextProcessModelValue(`${model}@${matchedProviderName}`);
+  //   } else {
+  //     // 使用accessStore中的值或props中的默认值
+  //     let model = props.modelConfig.textProcessModel;
+  //     let providerName = props.modelConfig.textProcessProviderName;
+
+  //     // 如果accessStore中有值，优先使用
+  //     if (accessStore.textProcessModel) {
+  //       const parts = accessStore.textProcessModel.split("@");
+  //       if (parts.length > 0) {
+  //         model = parts[0];
+  //         if (parts.length > 1) {
+  //           providerName = parts[1] as ServiceProvider;
+  //         }
+  //       }
+  //       console.log(
+  //         "[model-config] accessStore textProcessModel: ",
+  //         accessStore.textProcessModel,
+  //       );
+  //     }
+  //     const matchedProviderName = findMatchingProvider(
+  //       model,
+  //       providerName,
+  //       groupModels,
+  //     );
+  //     const value = `${model}@${matchedProviderName}`;
+  //     setTextProcessModelValue(value);
+  //     saveModelConfig("textProcessModel", value);
+  //     console.log("[model-config] change textProcessModel: ", value);
+
+  //     // 更新配置
+  //     props.updateConfig((config) => {
+  //       config.textProcessModel = ModalConfigValidator.model(model);
+  //       config.textProcessProviderName = matchedProviderName as ServiceProvider;
+  //     });
+  //   }
+
+  //   // 处理OCR模型
+  //   let useStoreOcrModel = false;
+  //   if (storedConfigs.ocrModel) {
+  //     // setOcrModelValue(storedConfigs.ocrModel);
+  //     const [model, providerName] = storedConfigs.ocrModel.split("@");
+  //     if (!isModelAvailable(model, providerName, allModels)) {
+  //       console.warn(
+  //         `ocrModel ${model} with provider ${providerName} is not available.`,
+  //       );
+  //     } else {
+  //       useStoreOcrModel = true;
+  //     }
+  //   }
+  //   if (useStoreOcrModel) {
+  //     const [model, providerName] = storedConfigs.ocrModel.split("@");
+  //     const matchedProviderName = findMatchingProvider(
+  //       model,
+  //       providerName,
+  //       groupModels,
+  //     );
+  //     props.updateConfig((config) => {
+  //       config.ocrModel = ModalConfigValidator.model(model);
+  //       config.ocrProviderName = matchedProviderName as ServiceProvider;
+  //     });
+  //     setOcrModelValue(`${model}@${matchedProviderName}`);
+  //   } else {
+  //     // 使用accessStore中的值或props中的默认值
+  //     let model = props.modelConfig.ocrModel;
+  //     let providerName = props.modelConfig.ocrProviderName;
+
+  //     // 如果accessStore中有值，优先使用
+  //     if (accessStore.ocrModel) {
+  //       const parts = accessStore.ocrModel.split("@");
+  //       if (parts.length > 0) {
+  //         model = parts[0];
+  //         if (parts.length > 1) {
+  //           providerName = parts[1] as ServiceProvider;
+  //         }
+  //       }
+  //     }
+  //     const matchedProviderName = findMatchingProvider(
+  //       model,
+  //       providerName,
+  //       groupModels,
+  //     );
+  //     const value = `${model}@${matchedProviderName}`;
+  //     setOcrModelValue(value);
+  //     saveModelConfig("ocrModel", value);
+  //     console.log("[model-config] change ocrModel: ", value);
+
+  //     // 更新配置
+  //     props.updateConfig((config) => {
+  //       config.ocrModel = ModalConfigValidator.model(model);
+  //       config.ocrProviderName = matchedProviderName as ServiceProvider;
+  //     });
+  //   }
+  // }, []);
+  // console.log("allModels:", allModels);
+  // console.log("groupModels:" , groupModels);
+  // console.log("chatModelValue:" , chatModelValue);
+  // console.log("compressModelValue:" , compressModelValue);
+  // console.log("textProcessModelValue:" , textProcessModelValue);
+  // console.log("ocrModelValue:" , ocrModelValue);
   return (
     <>
       <ListItem title={Locale.Settings.Model}>
         <Select
           aria-label={Locale.Settings.Model}
-          value={value}
+          value={chatModelValue}
           align="left"
           onChange={(e) => {
-            const [model, providerName] = e.currentTarget.value.split("@");
+            const value = e.currentTarget.value;
+            setChatModelValue(value);
+            // saveModelConfig("chatModel", value);
+
+            const [model, providerName] = value.split(/@(?=[^@]*$)/);
             props.updateConfig((config) => {
               config.model = ModalConfigValidator.model(model);
               config.providerName = providerName as ServiceProvider;
             });
           }}
         >
+          {accessStore.defaultModel && (
+            <option value={accessStore.defaultModel}>
+              【Default】{accessStore.defaultModel}
+            </option>
+          )}
           {Object.keys(groupModels).map((providerName, index) => (
             <optgroup label={providerName} key={index}>
               {groupModels[providerName].map((v, i) => (
@@ -62,6 +408,170 @@ export function ModelConfigList(props: {
         </Select>
       </ListItem>
       <ListItem
+        title={Locale.Settings.CompressModel.Title}
+        subTitle={Locale.Settings.CompressModel.SubTitle}
+      >
+        <Select
+          aria-label={Locale.Settings.CompressModel.Title}
+          value={compressModelValue}
+          align="left"
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setCompressModelValue(value);
+            // saveModelConfig("compressModel", value);
+
+            const [model, providerName] = value.split(/@(?=[^@]*$)/);
+
+            props.updateConfig((config) => {
+              config.compressModel = ModalConfigValidator.model(model);
+              config.compressProviderName = providerName as ServiceProvider;
+            });
+          }}
+        >
+          {accessStore.compressModel && (
+            <option value={accessStore.compressModel}>
+              【Default】{accessStore.compressModel}
+            </option>
+          )}
+          {Object.keys(groupModels).map((providerName, index) => (
+            <optgroup label={providerName} key={index}>
+              {groupModels[providerName].map((v, i) => (
+                <option value={`${v.name}@${v.provider?.providerName}`} key={i}>
+                  {v.displayName}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </Select>
+      </ListItem>
+
+      {/* 添加翻译模型选择器 */}
+      <ListItem
+        title={Locale.Settings.TextProcessModel.Title}
+        subTitle={Locale.Settings.TextProcessModel.SubTitle}
+      >
+        <Select
+          aria-label={Locale.Settings.TextProcessModel.Title}
+          value={textProcessModelValue}
+          align="left"
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setTextProcessModelValue(value);
+            // saveModelConfig("textProcessModel", value);
+
+            const [model, providerName] = value.split(/@(?=[^@]*$)/);
+            props.updateConfig((config) => {
+              config.textProcessModel = ModalConfigValidator.model(model);
+              config.textProcessProviderName = providerName as ServiceProvider;
+            });
+          }}
+        >
+          {accessStore.textProcessModel && (
+            <option value={accessStore.textProcessModel}>
+              【Default】{accessStore.textProcessModel}
+            </option>
+          )}
+          {Object.keys(groupModels).map((providerName, index) => (
+            <optgroup label={providerName} key={index}>
+              {groupModels[providerName].map((v, i) => (
+                <option value={`${v.name}@${v.provider?.providerName}`} key={i}>
+                  {v.displayName}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </Select>
+      </ListItem>
+
+      {/* 添加OCR模型选择器 */}
+      <ListItem
+        title={Locale.Settings.OCRModel.Title}
+        subTitle={Locale.Settings.OCRModel.SubTitle}
+      >
+        <Select
+          aria-label={Locale.Settings.OCRModel.Title}
+          value={ocrModelValue}
+          align="left"
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setOcrModelValue(value);
+            // saveModelConfig("ocrModel", value);
+
+            const [model, providerName] = value.split(/@(?=[^@]*$)/);
+            props.updateConfig((config) => {
+              config.ocrModel = ModalConfigValidator.model(model);
+              config.ocrProviderName = providerName as ServiceProvider;
+            });
+          }}
+        >
+          {accessStore.ocrModel && (
+            <option value={accessStore.ocrModel}>
+              【Default】{accessStore.ocrModel}
+            </option>
+          )}
+          {Object.keys(groupModels).map((providerName, index) => (
+            <optgroup label={providerName} key={index}>
+              {groupModels[providerName].map((v, i) => (
+                <option value={`${v.name}@${v.provider?.providerName}`} key={i}>
+                  {v.displayName}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </Select>
+      </ListItem>
+
+      <ListItem
+        title={Locale.Settings.StreamUsageEnable.Title}
+        subTitle={Locale.Settings.StreamUsageEnable.SubTitle}
+      >
+        <input
+          aria-label={Locale.Settings.StreamUsageEnable.Title}
+          type="checkbox"
+          checked={props.modelConfig.enableStreamUsageOptions}
+          onChange={(e) =>
+            props.updateConfig(
+              (config) =>
+                (config.enableStreamUsageOptions = e.currentTarget.checked),
+            )
+          }
+        ></input>
+      </ListItem>
+      {/* <ListItem
+        title={Locale.Settings.EnableStream.Title}
+        subTitle={Locale.Settings.EnableStream.SubTitle}
+      >
+        <input
+          aria-label={Locale.Settings.EnableStream.Title}
+          type="checkbox"
+          checked={props.modelConfig.enableStream}
+          onChange={(e) =>
+            props.updateConfig(
+              (config) =>
+                (config.enableStream = e.currentTarget.checked),
+            )
+          }
+        ></input>
+      </ListItem> */}
+      <ListItem
+        title={Locale.Settings.RequestTimeout.Title}
+        subTitle={Locale.Settings.RequestTimeout.SubTitle}
+      >
+        <input
+          aria-label={Locale.Settings.RequestTimeout.Title}
+          type="number"
+          min={5}
+          max={4000}
+          value={props.modelConfig.requestTimeout || 300}
+          onChange={(e) =>
+            props.updateConfig(
+              (config) =>
+                (config.requestTimeout = e.currentTarget.valueAsNumber),
+            )
+          }
+        ></input>
+      </ListItem>
+      <ListItem
         title={Locale.Settings.Temperature.Title}
         subTitle={Locale.Settings.Temperature.SubTitle}
       >
@@ -69,9 +579,9 @@ export function ModelConfigList(props: {
           <input
             aria-label={Locale.Settings.Temperature.Title}
             type="number"
-            min={0}
-            max={1}
-            value={props.modelConfig.temperature.toFixed(1)}
+            // min={0}
+            // max={1}
+            value={props.modelConfig.temperature}
             disabled={!props.modelConfig.temperature_enabled}
             style={{
               width: "150px",
@@ -79,13 +589,13 @@ export function ModelConfigList(props: {
                 ? "inherit"
                 : "#e0e0e0",
             }}
-            onChange={(e) =>
+            onChange={(e) => {
               props.updateConfig((config) => {
                 config.temperature = ModalConfigValidator.temperature(
                   e.currentTarget.valueAsNumber,
                 );
-              })
-            }
+              });
+            }}
           />
           <input
             type="checkbox"
@@ -106,9 +616,9 @@ export function ModelConfigList(props: {
           <input
             aria-label={Locale.Settings.TopP.Title}
             type="number"
-            min={0}
-            max={1}
-            value={(props.modelConfig.top_p ?? 1).toFixed(1)}
+            // min={0}
+            // max={1}
+            value={props.modelConfig.top_p ?? 1}
             disabled={!props.modelConfig.top_p_enabled}
             style={{
               width: "150px",
@@ -116,13 +626,13 @@ export function ModelConfigList(props: {
                 ? "inherit"
                 : "#e0e0e0",
             }}
-            onChange={(e) =>
+            onChange={(e) => {
               props.updateConfig((config) => {
                 config.top_p = ModalConfigValidator.top_p(
                   e.currentTarget.valueAsNumber,
                 );
-              })
-            }
+              });
+            }}
           />
           <input
             type="checkbox"
@@ -185,7 +695,7 @@ export function ModelConfigList(props: {
                 type="number"
                 min={-2}
                 max={2}
-                value={props.modelConfig.presence_penalty?.toFixed(1)}
+                value={props.modelConfig.presence_penalty}
                 disabled={!props.modelConfig.presence_penalty_enabled}
                 style={{
                   width: "150px",
@@ -193,14 +703,14 @@ export function ModelConfigList(props: {
                     ? "inherit"
                     : "#e0e0e0",
                 }}
-                onChange={(e) =>
+                onChange={(e) => {
                   props.updateConfig((config) => {
                     config.presence_penalty =
                       ModalConfigValidator.presence_penalty(
                         e.currentTarget.valueAsNumber,
                       );
-                  })
-                }
+                  });
+                }}
               />
               <input
                 type="checkbox"
@@ -224,7 +734,7 @@ export function ModelConfigList(props: {
                 type="number"
                 min={-2}
                 max={2}
-                value={props.modelConfig.frequency_penalty?.toFixed(1)}
+                value={props.modelConfig.frequency_penalty}
                 disabled={!props.modelConfig.frequency_penalty_enabled}
                 style={{
                   width: "150px",
@@ -232,13 +742,14 @@ export function ModelConfigList(props: {
                     ? "inherit"
                     : "#e0e0e0",
                 }}
-                onChange={(e) =>
+                onChange={(e) => {
                   props.updateConfig((config) => {
-                    config.frequency_penalty = ModalConfigValidator.top_p(
-                      e.currentTarget.valueAsNumber,
-                    );
-                  })
-                }
+                    config.frequency_penalty =
+                      ModalConfigValidator.frequency_penalty(
+                        e.currentTarget.valueAsNumber,
+                      );
+                  });
+                }}
               />
               <input
                 type="checkbox"
@@ -337,85 +848,140 @@ export function ModelConfigList(props: {
           }
         ></input>
       </ListItem>
-      {/* <ListItem
-        title={Locale.Settings.CompressModel.Title}
-        subTitle={Locale.Settings.CompressModel.SubTitle}
+      <ListItem
+        title={Locale.Settings.ReasoningEffort.Title}
+        subTitle={Locale.Settings.ReasoningEffort.SubTitle}
       >
         <Select
-          className={styles["select-compress-model"]}
-          aria-label={Locale.Settings.CompressModel.Title}
-          value={compressModelValue}
+          aria-label={Locale.Settings.ReasoningEffort.Title}
+          value={props.modelConfig.reasoning_effort || "none"} // 默认值，如果未设置则为 'none'
+          align="left"
           onChange={(e) => {
-            console.log("e.currentTarget.value", e.currentTarget.value);
-            const [model, providerName] =
-              e.currentTarget.value.split(/@(?=[^@]*$)/);
+            const value = e.currentTarget.value; // 获取选中的值
             props.updateConfig((config) => {
-              config.compressModel = ModalConfigValidator.model(model);
-              config.compressProviderName = providerName as ServiceProvider;
+              config.reasoning_effort = value; // 更新配置
             });
           }}
         >
-          {allModels
-            .filter((v) => v.available)
-            .map((v, i) => (
-              <option value={`${v.name}@${v.provider?.providerName}`} key={i}>
-                {v.displayName}({v.provider?.providerName})
-              </option>
-            ))}
-        </Select>
-      </ListItem> */}
-      {/* <ListItem
-        title={Locale.Settings.TranslateModel.Title}
-        subTitle={Locale.Settings.TranslateModel.SubTitle}
-      >
-        <Select
-          className={styles["select-translate-model"]}
-          aria-label={Locale.Settings.TranslateModel.Title}
-          value={translateModelValue}
-          onChange={(e) => {
-            const [model, providerName] =
-              e.currentTarget.value.split(/@(?=[^@]*$)/);
-            props.updateConfig((config) => {
-              config.translateModel = ModalConfigValidator.model(model);
-              config.translateProviderName = providerName as ServiceProvider;
-            });
-          }}
-        >
-          {allModels
-            .filter((v) => v.available)
-            .map((v, i) => (
-              <option value={`${v.name}@${v.provider?.providerName}`} key={i}>
-                {v.displayName}({v.provider?.providerName})
-              </option>
-            ))}
+          <option value="low">low</option>
+          <option value="high">high</option>
+          <option value="none">none</option>
         </Select>
       </ListItem>
+      {/* Parameter Override feature */}
       <ListItem
-        title={Locale.Settings.OCRModel.Title}
-        subTitle={Locale.Settings.OCRModel.SubTitle}
+        title={Locale.Settings.ParameterOverride.Title}
+        subTitle={Locale.Settings.ParameterOverride.SubTitle}
+        vertical={true}
       >
-        <Select
-          className={styles["select-ocr-model"]}
-          aria-label={Locale.Settings.OCRModel.Title}
-          value={ocrModelValue}
-          onChange={(e) => {
-            const [model, providerName] =
-              e.currentTarget.value.split(/@(?=[^@]*$)/);
-            props.updateConfig((config) => {
-              config.ocrModel = ModalConfigValidator.model(model);
-              config.ocrProviderName = providerName as ServiceProvider;
-            });
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            width: "100%",
           }}
         >
-          {allModels
-            .filter((v) => v.available)
-            .map((v, i) => (
-              <option value={`${v.name}@${v.provider?.providerName}`} key={i}>
-                {v.displayName}({v.provider?.providerName})
-              </option>
-            ))}
-        </Select>
-      </ListItem> */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              width: "100%",
+              justifyContent: "flex-end",
+            }}
+          >
+            <textarea
+              placeholder='{"stream": false, "temperature": 0.8}'
+              value={props.modelConfig.paramOverrideContent || ""}
+              rows={3}
+              style={{
+                width: "100%",
+                resize: "vertical",
+                padding: "8px",
+                borderRadius: "6px",
+                border: "1px solid #ccc",
+                backgroundColor: props.modelConfig.enableParamOverride
+                  ? "inherit"
+                  : "#f0f0f0",
+                opacity: props.modelConfig.enableParamOverride ? 1 : 0.7,
+                transition: "all 0.3s ease",
+                marginRight: "8px",
+              }}
+              disabled={!props.modelConfig.enableParamOverride}
+              onChange={(e) => {
+                const content = e.currentTarget.value;
+                props.updateConfig((config) => {
+                  config.paramOverrideContent = content;
+
+                  // Apply JSON parameters if enabled and valid
+                  if (config.enableParamOverride && content) {
+                    try {
+                      const overrideParams = JSON.parse(content);
+                      Object.assign(config, overrideParams);
+                    } catch (error) {
+                      // Just store the content even if invalid JSON
+                    }
+                  }
+                });
+              }}
+            />
+            <input
+              type="checkbox"
+              checked={props.modelConfig.enableParamOverride || false}
+              onChange={(e) => {
+                const isEnabled = e.currentTarget.checked;
+                props.updateConfig((config) => {
+                  config.enableParamOverride = isEnabled;
+
+                  // Apply JSON parameters if enabled and valid JSON exists
+                  if (isEnabled && config.paramOverrideContent) {
+                    try {
+                      const overrideParams = JSON.parse(
+                        config.paramOverrideContent,
+                      );
+                      Object.assign(config, overrideParams);
+                    } catch (error) {
+                      console.error(
+                        "Failed to parse parameter override JSON:",
+                        error,
+                      );
+                    }
+                  }
+                });
+              }}
+            />
+          </div>
+
+          {props.modelConfig.enableParamOverride &&
+            props.modelConfig.paramOverrideContent && (
+              <div
+                style={{
+                  fontSize: "0.75em",
+                  marginTop: "2px",
+                  width: "55%",
+                  textAlign: "left",
+                  color: (() => {
+                    try {
+                      JSON.parse(props.modelConfig.paramOverrideContent);
+                      return "#10a37f"; // Success color
+                    } catch (e) {
+                      return "#e53e3e"; // Error color
+                    }
+                  })(),
+                }}
+              >
+                {(() => {
+                  try {
+                    JSON.parse(props.modelConfig.paramOverrideContent);
+                    return Locale.Settings.ParameterOverride.ValidJson;
+                  } catch (e) {
+                    return Locale.Settings.ParameterOverride.InvalidJson;
+                  }
+                })()}
+              </div>
+            )}
+        </div>
+      </ListItem>
     </>
   );
 }

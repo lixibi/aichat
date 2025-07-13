@@ -58,7 +58,7 @@
     animation: slide-in ease 0.45s;
     display: flex;
     justify-content: center;
-    font-size: 12px;
+    font-size: var(--text-xs);
 
     .skip {
       margin-left: 10px;
@@ -117,7 +117,7 @@
 
         .mask-name {
           margin-left: 10px;
-          font-size: 14px;
+          font-size: var(--text-sm);
         }
       }
     }

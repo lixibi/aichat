@@ -3,7 +3,7 @@ import * as React from "react";
 import styles from "./button.module.scss";
 import { CSSProperties } from "react";
 
-export type ButtonType = "primary" | "danger" | null;
+export type ButtonType = "primary" | "danger" | "info" | null;
 
 export function IconButton(props: {
   onClick?: () => void;
@@ -50,7 +50,7 @@ export function IconButton(props: {
       )}
 
       {props.text && (
-        <div 
+        <div
           aria-label={props.text || props.title}
           className={styles["icon-button-text"]}
         >

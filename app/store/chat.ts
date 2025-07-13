@@ -19,14 +19,15 @@ import type {
   ClientApi,
   RequestMessage,
   MultimodalContent,
+  UploadFile,
 } from "../client/api";
 import { getClientApi } from "../client/api";
 import { ChatControllerPool } from "../client/controller";
 import { prettyObject } from "../utils/format";
-import { estimateTokenLength } from "../utils/token";
+import { estimateTokenLengthInLLM } from "../utils/token";
 import { nanoid } from "nanoid";
 import { createPersistStore } from "../utils/store";
-import { safeLocalStorage } from "../utils";
+import { safeLocalStorage, readFileContent } from "../utils";
 import { indexedDBStorage } from "@/app/utils/indexedDB-storage";
 import { useAccessStore } from "./access";
 import { ServiceProvider } from "../constant";
@@ -39,6 +40,23 @@ export type ChatMessage = RequestMessage & {
   isError?: boolean;
   id: string;
   model?: ModelType;
+  displayName?: string;
+  providerName?: string;
+  providerId?: string;
+  providerType?: string;
+  beClear?: boolean;
+  isContinuePrompt?: boolean;
+  isStreamRequest?: boolean;
+
+  statistic?: {
+    singlePromptTokens?: number;
+    completionTokens?: number;
+    reasoningTokens?: number;
+    firstReplyLatency?: number;
+    searchingLatency?: number;
+    reasoningLatency?: number;
+    totalReplyLatency?: number;
+  };
 };
 
 export function createMessage(override: Partial<ChatMessage>): ChatMessage {
@@ -67,6 +85,8 @@ export interface ChatSession {
   lastUpdate: number;
   lastSummarizeIndex: number;
   clearContextIndex?: number;
+  inPrivateMode?: boolean;
+  pinned?: boolean;
 
   mask: Mask;
 }
@@ -124,10 +144,25 @@ function createTemplateRegex(output: string) {
 }
 
 function countMessages(msgs: ChatMessage[]) {
-  return msgs.reduce(
-    (pre, cur) => pre + estimateTokenLength(getMessageTextContent(cur)),
-    0,
-  );
+  return msgs.reduce((pre, cur) => pre + estimateMessageTokenInLLM(cur), 0);
+}
+
+export function estimateMessageTokenInLLM(message: RequestMessage) {
+  if (typeof message.content === "string") {
+    return estimateTokenLengthInLLM(message.content);
+  }
+  let total_tokens = 0;
+  for (const c of message.content) {
+    if (c.type === "text" && c.text) {
+      total_tokens += estimateTokenLengthInLLM(c.text);
+    } else if (c.type === "file_url" && c.file_url?.url) {
+      total_tokens +=
+        c.file_url?.tokenCount || estimateTokenLengthInLLM(c.file_url?.url);
+    } else if (c.type === "image_url") {
+      // todo
+    }
+  }
+  return total_tokens;
 }
 
 function fillTemplateWith(input: string, modelConfig: ModelConfig) {
@@ -260,7 +295,7 @@ export const useChatStore = createPersistStore(
         });
       },
 
-      newSession(mask?: Mask) {
+      newSession(mask?: Mask, privateMode?: boolean) {
         const session = createEmptySession();
 
         if (mask) {
@@ -275,6 +310,10 @@ export const useChatStore = createPersistStore(
             },
           };
           session.topic = mask.name;
+        }
+        if (privateMode) {
+          session.inPrivateMode = privateMode;
+          session.topic = Locale.Store.PrivateTopic;
         }
 
         set((state) => ({
@@ -333,6 +372,36 @@ export const useChatStore = createPersistStore(
         );
       },
 
+      // 添加置顶会话的方法
+      pinSession(index: number) {
+        set((state) => {
+          const sessions = [...state.sessions];
+          const session = sessions[index];
+          if (session) {
+            session.pinned = true;
+            session.lastUpdate = Date.now(); // 更新时间戳以触发UI更新
+          }
+          return {
+            sessions,
+          };
+        });
+      },
+
+      // 取消置顶会话的方法
+      unpinSession(index: number) {
+        set((state) => {
+          const sessions = [...state.sessions];
+          const session = sessions[index];
+          if (session) {
+            session.pinned = false;
+            session.lastUpdate = Date.now(); // 更新时间戳以触发UI更新
+          }
+          return {
+            sessions,
+          };
+        });
+      },
+
       currentSession() {
         let index = get().currentSessionIndex;
         const sessions = get().sessions;
@@ -356,42 +425,101 @@ export const useChatStore = createPersistStore(
         get().summarizeSession(false, targetSession);
       },
 
-      async onUserInput(content: string, attachImages?: string[]) {
+      async onUserInput(
+        content: string,
+        attachImages?: string[],
+        attachFiles?: UploadFile[],
+        isContinuePrompt?: boolean,
+      ) {
         const session = get().currentSession();
         const modelConfig = session.mask.modelConfig;
 
         const userContent = fillTemplateWith(content, modelConfig);
-        console.log("[User Input] after template: ", userContent);
+        // console.log("[User Input] after template: ", userContent);
 
         let mContent: string | MultimodalContent[] = userContent;
+        let displayContent: string | MultimodalContent[] = userContent;
 
-        if (attachImages && attachImages.length > 0) {
-          mContent = [
-            {
-              type: "text",
-              text: userContent,
-            },
+        const hasImages = attachImages && attachImages.length > 0;
+        const hasFiles = attachFiles && attachFiles.length > 0;
+        const hasAttachments = hasImages || hasFiles;
+        if (hasAttachments) {
+          // 如果有任何附件，内容必须是多模态部分组成的数组
+          const mContentParts: MultimodalContent[] = [];
+          const displayContentParts: MultimodalContent[] = [
+            { type: "text", text: userContent },
           ];
-          mContent = mContent.concat(
-            attachImages.map((url) => {
-              return {
-                type: "image_url",
-                image_url: {
-                  url: url,
+
+          // Part 1: 文件部分 (Files)
+          let mContentText = userContent;
+          if (hasFiles) {
+            let fileHeaderText = "";
+            // 处理每个文件，按照模板格式构建内容
+            // 遵循deepseek-ai推荐模板：https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#official-prompts
+            for (const file of attachFiles!) {
+              const curFileContent = await readFileContent(file);
+              if (curFileContent) {
+                fileHeaderText += `[file name]: ${file.name}\n`;
+                fileHeaderText += `[file content begin]\n`;
+                fileHeaderText += curFileContent;
+                fileHeaderText += `\n[file content end]\n`;
+              }
+            }
+            mContentText = fileHeaderText + userContent;
+
+            // 对于UI展示，文件以结构化对象的形式存在
+            displayContentParts.push(
+              ...attachFiles!.map((file) => ({
+                type: "file_url" as const,
+                file_url: {
+                  url: file.url,
+                  name: file.name,
+                  contentType: file.contentType,
+                  size: file.size,
+                  tokenCount: file.tokenCount,
                 },
-              };
-            }),
-          );
+              })),
+            );
+          }
+
+          // 发送给模型的文本部分（可能已包含文件内容）必须是第一个部分
+          mContentParts.push({ type: "text", text: mContentText });
+
+          // Part 2: 图片部分 (Images)
+          if (hasImages) {
+            const imageParts: MultimodalContent[] = attachImages!.map(
+              (url) => ({
+                type: "image_url" as const,
+                image_url: { url },
+              }),
+            );
+            // 图片部分同时添加到模型入参和UI展示内容中
+            mContentParts.push(...imageParts);
+            displayContentParts.push(...imageParts);
+          }
+
+          mContent = mContentParts;
+          displayContent = displayContentParts;
         }
+
         let userMessage: ChatMessage = createMessage({
           role: "user",
           content: mContent,
+          isContinuePrompt: isContinuePrompt,
+          statistic: {
+            // singlePromptTokens: totalTokens ?? 0,
+          },
         });
+        if (userMessage.statistic) {
+          userMessage.statistic.singlePromptTokens =
+            estimateMessageTokenInLLM(userMessage);
+        }
 
         const botMessage: ChatMessage = createMessage({
           role: "assistant",
           streaming: true,
           model: modelConfig.model,
+          providerName: modelConfig.providerName || "OpenAI",
         });
 
         // get recent messages
@@ -401,9 +529,11 @@ export const useChatStore = createPersistStore(
 
         // save user's and bot's message
         get().updateCurrentSession((session) => {
+          // 存储在会话中的用户消息使用 displayContent，以支持富文本渲染
           const savedUserMessage = {
             ...userMessage,
-            content: mContent,
+            //content: mContent,
+            content: displayContent,
           };
           session.messages = session.messages.concat([
             savedUserMessage,
@@ -429,7 +559,24 @@ export const useChatStore = createPersistStore(
           onFinish(message) {
             botMessage.streaming = false;
             if (message) {
-              botMessage.content = message;
+              botMessage.content =
+                typeof message === "string" ? message : message.content;
+              if (typeof message !== "string") {
+                if (!botMessage.statistic) {
+                  botMessage.statistic = {};
+                }
+                botMessage.isStreamRequest = !!message?.is_stream_request;
+                botMessage.statistic.completionTokens =
+                  message?.usage?.completion_tokens;
+                botMessage.statistic.firstReplyLatency =
+                  message?.usage?.first_content_latency;
+                botMessage.statistic.totalReplyLatency =
+                  message?.usage?.total_latency;
+                botMessage.statistic.reasoningLatency =
+                  message?.usage?.thinking_time;
+                botMessage.statistic.searchingLatency =
+                  message?.usage?.searching_time;
+              }
               botMessage.date = new Date().toLocaleString();
               get().onNewMessage(botMessage, session);
             }
@@ -482,9 +629,18 @@ export const useChatStore = createPersistStore(
       getMessagesWithMemory() {
         const session = get().currentSession();
         const modelConfig = session.mask.modelConfig;
-        const clearContextIndex = session.clearContextIndex ?? 0;
         const messages = session.messages.slice();
         const totalMessageCount = session.messages.length;
+
+        let clearContextIndex = session.clearContextIndex ?? 0;
+        for (let i = totalMessageCount - 1; i >= 0; i--) {
+          if (messages[i].beClear === true) {
+            // 找到带有 beClear 标记的消息，更新 clearContextIndex
+            // +1 是因为我们需要从这条消息之后开始包含消息
+            clearContextIndex = i + 1;
+            break;
+          }
+        }
 
         // in-context prompts
         const contextPrompts = session.mask.context.slice();
@@ -552,7 +708,7 @@ export const useChatStore = createPersistStore(
         ) {
           const msg = messages[i];
           if (!msg || msg.isError) continue;
-          tokenCount += estimateTokenLength(getMessageTextContent(msg));
+          tokenCount += estimateTokenLengthInLLM(getMessageTextContent(msg));
           reversedRecentMessages.push(msg);
         }
         // concat all messages
@@ -574,7 +730,29 @@ export const useChatStore = createPersistStore(
         const sessions = get().sessions;
         const session = sessions.at(sessionIndex);
         const messages = session?.messages;
-        updater(messages?.at(messageIndex));
+        const message = messages?.at(messageIndex);
+
+        // 保存更新前的消息内容
+        const oldContent = message ? getMessageTextContent(message) : "";
+
+        // 应用更新
+        updater(message);
+
+        const newContent = message ? getMessageTextContent(message) : "";
+
+        // 如果是消息内容已更改，更新token计数
+        if (message && newContent !== oldContent) {
+          if (!message.statistic) {
+            message.statistic = {};
+          }
+          if (message.role === "assistant") {
+            message.statistic.completionTokens =
+              estimateMessageTokenInLLM(message);
+          } else {
+            message.statistic.singlePromptTokens =
+              estimateMessageTokenInLLM(message);
+          }
+        }
         set(() => ({ sessions }));
       },
 
@@ -589,26 +767,27 @@ export const useChatStore = createPersistStore(
         refreshTitle: boolean = false,
         targetSession: ChatSession,
       ) {
+        const access = useAccessStore.getState();
         const config = useAppConfig.getState();
         const session = targetSession;
 
-        const compressModel = getCompressModel();
-        const [compressModelName, compressProviderName] =
-          compressModel.split(/@(?=[^@]*$)/);
-        if (compressModelName) {
-          session.mask.modelConfig.compressModel = compressModelName;
-          if (compressProviderName) {
-            session.mask.modelConfig.translateProviderName =
-              compressProviderName as ServiceProvider;
-          }
-        }
         const modelConfig = session.mask.modelConfig;
+        let compressModel = modelConfig.compressModel;
+        let providerName = modelConfig.compressProviderName;
+        // console.log("[Summarize] ", compressModel)
+        if ((!compressModel || !providerName) && access.compressModel) {
+          let providerNameStr;
+          [compressModel, providerNameStr] =
+            access.compressModel.split(/@(?=[^@]*$)/);
+          providerName = providerNameStr as ServiceProvider;
+        }
+        // console.log("[Summarize] ", compressModel)
 
-        const providerName = modelConfig.compressProviderName;
         const api: ClientApi = getClientApi(providerName);
 
         // remove error messages if any
         const messages = session.messages;
+        let clearContextIndex = session.clearContextIndex ?? 0;
 
         // should summarize topic after chating more than 50 words
         const SUMMARIZE_MIN_LEN = 50;
@@ -618,8 +797,16 @@ export const useChatStore = createPersistStore(
             countMessages(messages) >= SUMMARIZE_MIN_LEN) ||
           refreshTitle
         ) {
+          const totalMessageCount = session.messages.length;
+          for (let i = totalMessageCount - 1; i >= 0; i--) {
+            if (session.messages[i].beClear === true) {
+              clearContextIndex = i + 1;
+              break;
+            }
+          }
           const startIndex = Math.max(
             0,
+            clearContextIndex,
             messages.length - modelConfig.historyMessageCount,
           );
           const topicMessages = messages
@@ -643,12 +830,15 @@ export const useChatStore = createPersistStore(
           api.llm.chat({
             messages: topicMessages,
             config: {
-              model: modelConfig.compressModel,
+              model: compressModel,
               stream: false,
             },
+            type: "topic",
             onFinish(message, responseRes) {
               if (responseRes?.status === 200) {
-                if (!isValidMessage(message)) {
+                let replyContent: string =
+                  typeof message === "string" ? message : message.content;
+                if (!isValidMessage(replyContent)) {
                   showToast(Locale.Chat.Actions.FailTitleToast);
                   return;
                 }
@@ -656,7 +846,9 @@ export const useChatStore = createPersistStore(
                   session,
                   (session) =>
                     (session.topic =
-                      message.length > 0 ? trimTopic(message) : DEFAULT_TOPIC),
+                      replyContent.length > 0
+                        ? trimTopic(replyContent)
+                        : DEFAULT_TOPIC),
                 );
               }
             },
@@ -664,7 +856,7 @@ export const useChatStore = createPersistStore(
         }
         const summarizeIndex = Math.max(
           session.lastSummarizeIndex,
-          session.clearContextIndex ?? 0,
+          clearContextIndex,
         );
         let toBeSummarizedMsgs = messages
           .filter((msg) => !msg.isError)
@@ -686,12 +878,12 @@ export const useChatStore = createPersistStore(
 
         const lastSummarizeIndex = session.messages.length;
 
-        console.log(
-          "[Chat History] ",
-          toBeSummarizedMsgs,
-          historyMsgLength,
-          modelConfig.compressMessageLengthThreshold,
-        );
+        // console.log(
+        //   "[Chat History] ",
+        //   toBeSummarizedMsgs,
+        //   historyMsgLength,
+        //   modelConfig.compressMessageLengthThreshold,
+        // );
 
         if (
           historyMsgLength > modelConfig.compressMessageLengthThreshold &&
@@ -718,22 +910,25 @@ export const useChatStore = createPersistStore(
                     : getMessageTextContent(v),
               })),
             config: {
-              ...modelcfg,
+              // ...modelcfg,
               stream: true,
-              model: modelConfig.compressModel,
+              model: compressModel,
             },
+            type: "compress",
             onUpdate(message) {
               session.memoryPrompt = message;
             },
             onFinish(message, responseRes) {
               if (responseRes?.status === 200) {
                 console.log("[Memory] ", message);
-                if (!isValidMessage(message)) {
+                let replyContent =
+                  typeof message === "string" ? message : message.content;
+                if (!isValidMessage(replyContent)) {
                   return;
                 }
                 get().updateTargetSession(session, (session) => {
                   session.lastSummarizeIndex = lastSummarizeIndex;
-                  session.memoryPrompt = message; // Update the memory prompt for stored it in local storage
+                  session.memoryPrompt = replyContent; // Update the memory prompt for stored it in local storage
                 });
               }
             },
@@ -766,6 +961,7 @@ export const useChatStore = createPersistStore(
       updateStat(message: ChatMessage) {
         get().updateCurrentSession((session) => {
           session.stat.charCount += message.content.length;
+          session.stat.tokenCount += estimateMessageTokenInLLM(message);
           // TODO: should update chat count and word count
         });
       },
@@ -783,8 +979,47 @@ export const useChatStore = createPersistStore(
         const sessions = get().sessions;
         const index = sessions.findIndex((s) => s.id === targetSession.id);
         if (index < 0) return;
+        // Save message content before updates to compare later
+        const messagesBeforeUpdate = JSON.stringify(
+          sessions[index].messages.map((m) =>
+            typeof m.content === "string"
+              ? m.content
+              : getMessageTextContent(m),
+          ),
+        );
         updater(sessions[index]);
+        // Check if any message content has changed and update token stats
+        const updatedSession = sessions[index];
+        const messagesAfterUpdate = updatedSession.messages.map((m) =>
+          typeof m.content === "string" ? m.content : getMessageTextContent(m),
+        );
+        // Update token counts for any changed messages
+        const beforeMessages = JSON.parse(messagesBeforeUpdate);
+        updatedSession.messages.forEach((message, i) => {
+          if (
+            i < beforeMessages.length &&
+            messagesAfterUpdate[i] !== beforeMessages[i]
+          ) {
+            // Content changed, update token count
+            if (!message.statistic) {
+              message.statistic = {};
+            }
+
+            if (message.role === "assistant") {
+              message.statistic.completionTokens =
+                estimateMessageTokenInLLM(message);
+            } else {
+              message.statistic.singlePromptTokens =
+                estimateMessageTokenInLLM(message);
+            }
+          }
+        });
         set(() => ({ sessions }));
+      },
+      async clearAllChatData() {
+        await indexedDBStorage.removeItem(StoreKey.Chat);
+        localStorage.removeItem(StoreKey.Chat);
+        location.reload();
       },
       async clearAllData() {
         await indexedDBStorage.clear();
@@ -802,7 +1037,7 @@ export const useChatStore = createPersistStore(
   },
   {
     name: StoreKey.Chat,
-    version: 3.2,
+    version: 3.4,
     migrate(persistedState, version) {
       const state = persistedState as any;
       const newState = JSON.parse(
@@ -862,6 +1097,24 @@ export const useChatStore = createPersistStore(
           // s.mask.modelConfig.ocrModel = config.modelConfig.ocrModel;
           // s.mask.modelConfig.ocrProviderName =
           //   config.modelConfig.ocrProviderName;
+        });
+      }
+      if (version < 3.3) {
+        newState.sessions.forEach((s) => {
+          // 将旧的 clearContextIndex 转换为新的 beClear 标记
+          if (s.clearContextIndex !== undefined && s.clearContextIndex > 0) {
+            const index = s.clearContextIndex - 1; // 因为 divider 显示在 clearContextIndex-1 的位置
+            if (index >= 0 && index < s.messages.length) {
+              s.messages[index].beClear = true;
+            }
+          }
+        });
+      }
+      // 处理会话置顶功能（pinSession)新增字段的数据迁移
+      if (version < 3.4) {
+        newState.sessions.forEach((s) => {
+          // 为旧数据添加置顶相关字段的默认值
+          s.pinned = s.pinned || false;
         });
       }
 

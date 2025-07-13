@@ -124,12 +124,19 @@ const id: PartialLocaleType = {
         Confirm:
           "Anda yakin ingin mengembalikan semua pengaturan ke nilai default?",
       },
-      Clear: {
-        Title: "Hapus Semua Data",
-        SubTitle: "Semua data yang tersimpan secara lokal akan dihapus",
-        Action: "Hapus",
+      ClearChat: {
+        Title: "Hapus Data Obrolan",
+        SubTitle: "Hapus semua data obrolan (tidak termasuk pengaturan)",
+        Action: "Hapus Sekarang",
+        Confirm: "Apakah Anda yakin ingin menghapus semua data obrolan?",
+      },
+      ClearALL: {
+        Title: "Hapus Semua Data dan Pengaturan",
+        SubTitle:
+          "Hapus semua data obrolan dan pengaturan, kembali ke keadaan awal",
+        Action: "Hapus Semua",
         Confirm:
-          "Apakah Anda yakin ingin menghapus semua data yang tersimpan secara lokal?",
+          "Apakah Anda yakin ingin menghapus semua data obrolan dan pengaturan?",
       },
     },
     Lang: {
@@ -385,8 +392,8 @@ const id: PartialLocaleType = {
   },
   Exporter: {
     Description: {
-      Title: "Hanya pesan setelah menghapus konteks yang akan ditampilkan"
-    },  
+      Title: "Hanya pesan setelah menghapus konteks yang akan ditampilkan",
+    },
     Model: "Model",
     Messages: "Pesan",
     Topic: "Topik",

@@ -41,7 +41,7 @@ export const DEFAULT_CONFIG = {
 
   submitKey: SubmitKey.Enter,
   avatar: "1f603",
-  fontSize: 14,
+  fontSize: 16, // base font size in px, used in chat title and markdown content
   theme: Theme.Auto as Theme,
   tightBorder: !!config?.isApp,
   sendPreviewBubble: true,
@@ -50,44 +50,57 @@ export const DEFAULT_CONFIG = {
 
   enableArtifacts: true, // show artifacts config
 
-  enableCodeFold: false, // code fold config
+  enableCodeFold: true, // code fold config
+  enableFloatingButton: false,
 
   disablePromptHint: false,
+  enableShowUserContinuePrompt: false,
+  customUserContinuePrompt: "",
+  enableTextExpansion: true,
 
-  dontShowMaskSplashScreen: false, // dont show splash screen when create chat
+  dontShowMaskSplashScreen: true, // dont show splash screen when create chat
   hideBuiltinMasks: false, // dont add builtin masks
 
   customModels: "",
   models: DEFAULT_MODELS as any as LLMModel[],
 
   modelConfig: {
-    model: "gpt-4o-mini" as ModelType,
+    model: "" as ModelType,
     providerName: "OpenAI" as ServiceProvider,
+    enableStream: true,
+    requestTimeout: 300,
     temperature: 0.5,
     temperature_enabled: true,
     top_p: 0.99,
-    top_p_enabled: true,
-    max_tokens: 4000,
+    top_p_enabled: false,
+    max_tokens: 8000,
     max_tokens_enabled: true,
     presence_penalty: 0,
-    presence_penalty_enabled: true,
+    presence_penalty_enabled: false,
     frequency_penalty: 0,
-    frequency_penalty_enabled: true,
+    frequency_penalty_enabled: false,
+    reasoning_effort: "none",
     sendMemory: true,
     historyMessageCount: 4,
     compressMessageLengthThreshold: 1000,
-    compressModel: "gpt-4o-mini" as ModelType,
-    compressProviderName: "OpenAI" as ServiceProvider,
-    translateModel: "gpt-4o-mini" as ModelType,
-    translateProviderName: "OpenAI" as ServiceProvider,
-    ocrModel: "gpt-4o-mini" as ModelType,
-    ocrProviderName: "OpenAI" as ServiceProvider,
+    compressModel: "" as ModelType,
+    compressProviderName: "" as ServiceProvider,
+    // translateModel: "gpt-4o-mini" as ModelType,
+    // translateProviderName: "" as ServiceProvider,
+    textProcessModel: "" as ModelType,
+    textProcessProviderName: "" as ServiceProvider,
+    ocrModel: "" as ModelType,
+    ocrProviderName: "" as ServiceProvider,
     enableInjectSystemPrompts: false,
+    enableStreamUsageOptions: false,
     template: config?.template ?? DEFAULT_INPUT_TEMPLATE,
+    // 参数覆盖变量
+    paramOverrideContent: "",
+    enableParamOverride: false,
   },
 
   ttsConfig: {
-    enable: true,
+    enable: false,
     autoplay: false,
     engine: DEFAULT_TTS_ENGINE,
     model: DEFAULT_TTS_MODEL,
@@ -134,7 +147,7 @@ export const ModalConfigValidator = {
     return x as ModelType;
   },
   max_tokens(x: number) {
-    return limitNumber(x, 0, 512000, 1024);
+    return limitNumber(x, 0, 512000, 4000);
   },
   presence_penalty(x: number) {
     return limitNumber(x, -2, 2, 0);
@@ -143,10 +156,10 @@ export const ModalConfigValidator = {
     return limitNumber(x, -2, 2, 0);
   },
   temperature(x: number) {
-    return limitNumber(x, 0, 2, 1);
+    return limitNumber(x, 0, 2, 0.6);
   },
   top_p(x: number) {
-    return limitNumber(x, 0, 1, 1);
+    return limitNumber(x, 0, 2, 0.99);
   },
 };
 
@@ -184,7 +197,7 @@ export const useAppConfig = createPersistStore(
   }),
   {
     name: StoreKey.Config,
-    version: 4.1,
+    version: 4.5,
 
     merge(persistedState, currentState) {
       const state = persistedState as ChatConfig | undefined;
@@ -209,12 +222,12 @@ export const useAppConfig = createPersistStore(
 
       if (version < 3.4) {
         state.modelConfig.sendMemory = true;
-        state.modelConfig.historyMessageCount = 8;
-        state.modelConfig.compressMessageLengthThreshold = 2000;
+        state.modelConfig.historyMessageCount = 4;
+        state.modelConfig.compressMessageLengthThreshold = 1000;
         state.modelConfig.frequency_penalty = 0;
         state.modelConfig.top_p = 1;
         state.modelConfig.template = DEFAULT_INPUT_TEMPLATE;
-        state.dontShowMaskSplashScreen = false;
+        state.dontShowMaskSplashScreen = true;
         state.hideBuiltinMasks = false;
       }
 
@@ -246,20 +259,34 @@ export const useAppConfig = createPersistStore(
           DEFAULT_CONFIG.modelConfig.compressModel;
         state.modelConfig.compressProviderName =
           DEFAULT_CONFIG.modelConfig.compressProviderName;
-        state.modelConfig.translateModel =
-          DEFAULT_CONFIG.modelConfig.translateModel;
-        state.modelConfig.translateProviderName =
-          DEFAULT_CONFIG.modelConfig.translateProviderName;
+        // state.modelConfig.translateModel =
+        //   DEFAULT_CONFIG.modelConfig.translateModel;
+        // state.modelConfig.translateProviderName =
+        //   DEFAULT_CONFIG.modelConfig.translateProviderName;
         state.modelConfig.ocrModel = DEFAULT_CONFIG.modelConfig.ocrModel;
         state.modelConfig.ocrProviderName =
           DEFAULT_CONFIG.modelConfig.ocrProviderName;
       }
-      if (version < 4.1) {
+      if (version < 4.2) {
         state.modelConfig.temperature_enabled = true;
-        state.modelConfig.top_p_enabled = true;
-        state.modelConfig.max_tokens_enabled = true;
-        state.modelConfig.presence_penalty_enabled = true;
-        state.modelConfig.frequency_penalty_enabled = true;
+        state.modelConfig.top_p_enabled = false;
+        state.modelConfig.max_tokens_enabled = false;
+        state.modelConfig.presence_penalty_enabled = false;
+        state.modelConfig.frequency_penalty_enabled = false;
+        state.modelConfig.enableStreamUsageOptions = false;
+        state.modelConfig.reasoning_effort = "none";
+      }
+      if (version < 4.3) {
+        state.modelConfig.textProcessModel =
+          DEFAULT_CONFIG.modelConfig.textProcessModel;
+        state.modelConfig.textProcessProviderName =
+          DEFAULT_CONFIG.modelConfig.textProcessProviderName;
+      }
+      if (version < 4.4) {
+        state.fontSize = 16; // Ensure fontSize is set to 16px
+      }
+      if (version < 4.5) {
+        state.modelConfig.max_tokens = 8000;
       }
       return state as any;
     },

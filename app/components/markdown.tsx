@@ -1,3 +1,4 @@
+import hljs from "highlight.js";
 import ReactMarkdown from "react-markdown";
 import "katex/dist/katex.min.css";
 import RemarkMath from "remark-math";
@@ -9,23 +10,80 @@ import RehypeHighlight from "rehype-highlight";
 import rehypeSanitize from "rehype-sanitize";
 import { defaultSchema } from "rehype-sanitize";
 import { useRef, useState, RefObject, useEffect, useMemo } from "react";
-import { copyToClipboard, useWindowSize } from "../utils";
+import { copyToClipboard, downloadAs } from "../utils";
 import mermaid from "mermaid";
 import Locale from "../locales";
 import LoadingIcon from "../icons/three-dots.svg";
-import ReloadButtonIcon from "../icons/reload.svg";
+// import ReloadButtonIcon from "../icons/reload.svg";
 import React from "react";
-import { useDebouncedCallback } from "use-debounce";
+// import { useDebouncedCallback } from "use-debounce";
 import { showImageModal, FullScreen } from "./ui-lib";
 import { HTMLPreview, HTMLPreviewHander } from "./artifacts";
 import { useChatStore } from "../store";
-import { IconButton } from "./button";
+// import { IconButton } from "./button";
 
 import { useAppConfig } from "../store/config";
 
 import { Collapse } from "antd";
-import styled from "styled-components";
-const { Panel } = Collapse;
+import styles from "./markdown.module.scss";
+
+interface SearchCollapseProps {
+  title?: string | React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}
+
+const SearchCollapse = ({
+  title,
+  children,
+  className,
+}: SearchCollapseProps) => {
+  const defaultActive = title === Locale.NewChat.Searching ? ["1"] : [];
+  const [activeKeys, setActiveKeys] = useState(defaultActive);
+
+  useEffect(() => {
+    if (typeof title === "string" && title.includes(Locale.NewChat.Search)) {
+      setActiveKeys([]);
+    } else if (title === Locale.NewChat.Searching) {
+      setActiveKeys(["1"]);
+    }
+  }, [title]);
+
+  const toggleCollapse = () => {
+    setActiveKeys(activeKeys.length ? [] : ["1"]);
+  };
+
+  const handleRightClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    toggleCollapse();
+  };
+
+  const handleDoubleClick = () => {
+    toggleCollapse();
+  };
+
+  return (
+    <div
+      onContextMenu={handleRightClick}
+      onDoubleClick={handleDoubleClick}
+      className={`${styles["search-collapse"]} ${className || ""}`}
+    >
+      <Collapse
+        size="small"
+        activeKey={activeKeys}
+        onChange={(keys) => setActiveKeys(keys as string[])}
+        bordered={false}
+        items={[
+          {
+            key: "1",
+            label: title,
+            children: children,
+          },
+        ]}
+      ></Collapse>
+    </div>
+  );
+};
 
 interface ThinkCollapseProps {
   title: string | React.ReactNode;
@@ -33,82 +91,114 @@ interface ThinkCollapseProps {
   className?: string;
   fontSize?: number;
 }
-const ThinkCollapse = styled(
-  ({ title, children, className, fontSize }: ThinkCollapseProps) => {
-    // 如果是 Thinking 状态，默认展开，否则折叠
-    const defaultActive = title === Locale.NewChat.Thinking ? ["1"] : [];
-    // 如果是 NoThink 状态，禁用
-    const disabled = title === Locale.NewChat.NoThink;
-    const [activeKeys, setActiveKeys] = useState(defaultActive);
+const ThinkCollapse = ({
+  title,
+  children,
+  className,
+  fontSize,
+}: ThinkCollapseProps) => {
+  // 如果是 Thinking 状态，默认展开，否则折叠
+  const defaultActive = title === Locale.NewChat.Thinking ? ["1"] : [];
+  // 如果是 NoThink 状态，禁用
+  const disabled = title === Locale.NewChat.NoThink;
+  const [activeKeys, setActiveKeys] = useState(defaultActive);
 
-    // 当标题从 Thinking 变为 Think 或 NoThink 时自动折叠
-    useEffect(() => {
-      if (title === Locale.NewChat.Think || title === Locale.NewChat.NoThink) {
-        setActiveKeys([]);
-      } else if (title === Locale.NewChat.Thinking) {
-        setActiveKeys(["1"]);
-      }
-    }, [title]);
+  // 当标题从 Thinking 变为 Think 或 NoThink 时自动折叠
+  useEffect(() => {
+    if (
+      (typeof title === "string" && title.includes(Locale.NewChat.Think)) ||
+      title === Locale.NewChat.NoThink
+    ) {
+      setActiveKeys([]);
+    } else if (title === Locale.NewChat.Thinking) {
+      setActiveKeys(["1"]);
+    }
+  }, [title]);
 
-    return (
+  const toggleCollapse = () => {
+    if (!disabled) {
+      setActiveKeys(activeKeys.length ? [] : ["1"]);
+    }
+  };
+
+  const handleRightClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    toggleCollapse();
+  };
+
+  const handleDoubleClick = () => {
+    toggleCollapse();
+  };
+
+  // Recursive function to extract text from children
+  const extractText = (node: any): string => {
+    if (!node) return "";
+
+    // Direct string
+    if (typeof node === "string") return node;
+
+    // Array of nodes
+    if (Array.isArray(node)) {
+      return node.map(extractText).join("");
+    }
+
+    // React element
+    if (node.props && node.props.children) {
+      return extractText(node.props.children);
+    }
+
+    return "";
+  };
+
+  const handleCopyContent = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const text = extractText(children);
+      copyToClipboard(`<think>${text}</think>`);
+    } catch (err) {
+      console.error("Failed to copy thinking content:", err);
+    }
+  };
+
+  return (
+    <div
+      onContextMenu={handleRightClick}
+      onDoubleClick={handleDoubleClick}
+      className={`${styles["think-collapse"]} ${
+        disabled ? styles.disabled : ""
+      } ${className || ""}`}
+      // style={{ fontSize: `${fontSize}px` }}
+    >
       <Collapse
-        className={`${className} ${disabled ? "disabled" : ""}`}
+        className={`${disabled ? "disabled" : ""}`}
         size="small"
         activeKey={activeKeys}
         onChange={(keys) => !disabled && setActiveKeys(keys as string[])}
         bordered={false}
-      >
-        <Panel header={title} key="1">
-          {children}
-        </Panel>
-      </Collapse>
-    );
-  },
-)<{ fontSize?: number }>`
-  .ant-collapse-item {
-    border: var(--border-in-light) !important;
-    border-radius: 10px !important;
-    background-color: var(--white) !important;
-    margin-bottom: 8px !important;
-  }
-
-  .ant-collapse-header {
-    color: var(--black) !important;
-    font-weight: bold !important;
-    font-size: ${(props) => props.fontSize ?? 14}px !important;
-    padding: 6px 12px !important;
-    align-items: center !important;
-    transition: all 0.3s ease !important;
-
-    .ant-collapse-expand-icon {
-      color: var(--primary) !important;
-    }
-  }
-
-  .ant-collapse-content {
-    background-color: transparent !important;
-    border-top: 1px solid var(--border-in-light) !important;
-
-    .ant-collapse-content-box {
-      padding: 8px 12px !important;
-      font-size: ${(props) => props.fontSize ?? 14}px;
-      color: var(--black);
-      opacity: 0.8;
-    }
-  }
-
-  &.disabled {
-    opacity: 0.9;
-    pointer-events: none;
-    .ant-collapse-item {
-      border: none !important;
-      background-color: transparent !important;
-    }
-    .ant-collapse-header {
-      padding: 6px 0px !important;
-    }
-  }
-`;
+        items={[
+          {
+            key: "1",
+            label: (
+              <div className={styles["think-collapse-header"]}>
+                <span>{title}</span>
+                {!disabled && (
+                  <span
+                    className={styles["copy-think-button"]}
+                    onClick={handleCopyContent}
+                    title={Locale.Chat.Actions.Copy}
+                  >
+                    📋
+                  </span>
+                )}
+              </div>
+            ),
+            children: children,
+          },
+        ]}
+      ></Collapse>
+    </div>
+  );
+};
 
 // 配置安全策略，允许 thinkcollapse 标签，防止html注入造成页面崩溃
 const sanitizeOptions = {
@@ -118,6 +208,10 @@ const sanitizeOptions = {
     div: [
       ...(defaultSchema.attributes?.div || []),
       ["className", "math", "math-display"],
+    ],
+    img: [
+      ...(defaultSchema.attributes?.img || []),
+      ["src", ["http:", "https:", "data"]],
     ],
     math: [["xmlns", "http://www.w3.org/1998/Math/MathML"], "display"],
     annotation: ["encoding"],
@@ -133,6 +227,7 @@ const sanitizeOptions = {
   },
   tagNames: [
     ...(defaultSchema.tagNames || []),
+    "searchcollapse",
     "thinkcollapse",
     "math",
     "semantics",
@@ -147,6 +242,10 @@ const sanitizeOptions = {
     "svg",
     "path",
   ],
+  protocols: {
+    ...defaultSchema.protocols,
+    src: ["http", "https", "data"], // 允许的协议列表
+  },
 };
 
 function Details(props: { children: React.ReactNode }) {
@@ -206,104 +305,151 @@ export function Mermaid(props: { code: string }) {
 export function PreCode(props: { children: any }) {
   const ref = useRef<HTMLPreElement>(null);
   const previewRef = useRef<HTMLPreviewHander>(null);
-  const [mermaidCode, setMermaidCode] = useState("");
-  const [htmlCode, setHtmlCode] = useState("");
-  const { height } = useWindowSize();
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewContent, setPreviewContent] = useState("");
+  const [originalCode, setOriginalCode] = useState("");
+  const [language, setLanguage] = useState("");
+  const [contentType, setContentType] = useState<
+    "html" | "mermaid" | "svg" | null
+  >(null);
+
   const chatStore = useChatStore();
   const session = chatStore.currentSession();
-
-  const renderArtifacts = useDebouncedCallback(() => {
-    if (!ref.current) return;
-    const mermaidDom = ref.current.querySelector("code.language-mermaid");
-    if (mermaidDom) {
-      setMermaidCode((mermaidDom as HTMLElement).innerText);
-    }
-    const htmlDom = ref.current.querySelector("code.language-html");
-    const refText = ref.current.querySelector("code")?.innerText;
-    if (htmlDom) {
-      setHtmlCode((htmlDom as HTMLElement).innerText);
-    } else if (
-      refText?.startsWith("<!DOCTYPE") ||
-      refText?.startsWith("<svg") ||
-      refText?.startsWith("<?xml")
-    ) {
-      setHtmlCode(refText);
-    }
-  }, 600);
-
   const config = useAppConfig();
   const enableArtifacts =
     session.mask?.enableArtifacts !== false && config.enableArtifacts;
 
-  //Wrap the paragraph for plain-text
   useEffect(() => {
     if (ref.current) {
-      const codeElements = ref.current.querySelectorAll(
-        "code",
-      ) as NodeListOf<HTMLElement>;
-      const wrapLanguages = [
-        "",
-        "md",
-        "markdown",
-        "text",
-        "txt",
-        "plaintext",
-        "tex",
-        "latex",
-      ];
-      codeElements.forEach((codeElement) => {
-        let languageClass = codeElement.className.match(/language-(\w+)/);
-        let name = languageClass ? languageClass[1] : "";
-        if (wrapLanguages.includes(name)) {
-          codeElement.style.whiteSpace = "pre-wrap";
+      const codeElement = ref.current.querySelector("code");
+      if (codeElement) {
+        // 获取语言
+        const code = codeElement.innerText;
+        setOriginalCode(code);
+
+        const langClass = codeElement.className.match(/language-(\w+)/);
+        let lang = langClass ? langClass[1] : "";
+        if (code.startsWith("<!DOCTYPE") || code.startsWith("<?xml")) {
+          lang = "html";
         }
-      });
-      setTimeout(renderArtifacts, 1);
+        setLanguage(lang);
+
+        if (lang === "mermaid") {
+          setContentType("mermaid");
+          setPreviewContent(code);
+        } else if (code.startsWith("<svg") || lang === "svg") {
+          setContentType("svg");
+          setPreviewContent(code);
+          setLanguage("svg");
+        } else if (lang === "html") {
+          setLanguage("html");
+          setContentType("html");
+          setPreviewContent(code);
+        }
+        if (
+          enableArtifacts &&
+          (lang === "mermaid" || lang === "svg" || lang === "html")
+        ) {
+          setShowPreview(true);
+        }
+      }
     }
-  }, [renderArtifacts]);
-  return (
-    <>
-      <pre ref={ref}>
-        <span
-          className="copy-code-button"
-          onClick={() => {
-            if (ref.current) {
-              copyToClipboard(
-                ref.current.querySelector("code")?.innerText ?? "",
-              );
-            }
-          }}
-        ></span>
-        {props.children}
-      </pre>
-      {mermaidCode.length > 0 && (
-        <Mermaid code={mermaidCode} key={mermaidCode} />
-      )}
-      {htmlCode.length > 0 && enableArtifacts && (
-        <FullScreen className="no-dark html" right={70}>
-          {/* <ArtifactsShareButton
-            style={{ position: "absolute", right: 20, top: 10 }}
-            getCode={() => htmlCode}
-          /> */}
-          <span className="button-description" style={{ whiteSpace: "normal" }}>
-            {Locale.NewChat.ArtifactsInfo}
-          </span>
-          <IconButton
-            style={{ position: "absolute", right: 20, top: 10 }}
-            bordered
-            icon={<ReloadButtonIcon />}
-            shadow
-            onClick={() => previewRef.current?.reload()}
+  }, [enableArtifacts]);
+  const copyCode = () => {
+    copyToClipboard(originalCode);
+  };
+  const downloadCode = async () => {
+    let extension = language || "txt";
+    if (contentType === "html") extension = "html";
+    else if (contentType === "svg") extension = "svg";
+    else if (contentType === "mermaid") extension = "md";
+
+    const filename = `code-${Date.now()}.${extension}`;
+    await downloadAs(originalCode, filename);
+  };
+  const handlePreviewClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (contentType === "svg") {
+      const blob = new Blob([previewContent], { type: "image/svg+xml" });
+      showImageModal(URL.createObjectURL(blob));
+    } else if (contentType === "html") {
+      const win = window.open("", "_blank");
+      if (win) {
+        win.document.write(previewContent);
+        win.document.title = "HTML Preview";
+        win.document.close();
+      }
+    }
+  };
+  const renderPreview = () => {
+    if (!previewContent) return null;
+
+    switch (contentType) {
+      case "mermaid":
+        return <Mermaid code={previewContent} />;
+      case "svg":
+        return (
+          <div
+            dangerouslySetInnerHTML={{ __html: previewContent }}
+            style={{ maxWidth: "100%", overflow: "auto" }}
           />
+        );
+      case "html":
+        return (
           <HTMLPreview
             ref={previewRef}
-            code={htmlCode}
-            autoHeight={!document.fullscreenElement}
-            height={!document.fullscreenElement ? 600 : height}
+            code={previewContent}
+            autoHeight={true}
+            height={400}
           />
-        </FullScreen>
-      )}
-    </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className={styles["code-block-wrapper"]}>
+      <div className={styles["code-header"]}>
+        <div className={styles["code-header-left"]}>
+          {language && (
+            <span className={styles["code-language"]}>{language}</span>
+          )}
+        </div>
+        <div className={styles["code-header-right"]}>
+          <button className={styles["code-header-btn"]} onClick={copyCode}>
+            {Locale.Chat.Actions.Copy}
+          </button>
+          <button className={styles["code-header-btn"]} onClick={downloadCode}>
+            {Locale.Chat.Actions.Download}
+          </button>
+          <button
+            className={`${styles["code-header-btn"]} ${
+              !contentType ? styles["btn-disabled"] : ""
+            }`}
+            onClick={() => contentType && setShowPreview(!showPreview)}
+            disabled={!contentType}
+          >
+            {showPreview
+              ? Locale.Chat.Actions.ShowCode
+              : Locale.Chat.Actions.Preview}
+          </button>
+        </div>
+      </div>
+      <div className={styles["code-content"]}>
+        {showPreview ? (
+          <div
+            className={styles["preview-container"]}
+            onClick={handlePreviewClick}
+          >
+            {renderPreview()}
+          </div>
+        ) : (
+          <pre ref={ref}>{props.children}</pre>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -330,12 +476,20 @@ function CustomCode(props: { children: any; className?: string }) {
     setCollapsed((collapsed) => !collapsed);
   };
   const renderShowMoreButton = () => {
-    if (showToggle && enableCodeFold && collapsed) {
+    if (showToggle && enableCodeFold) {
       return (
         <div
           className={`show-hide-button ${collapsed ? "collapsed" : "expanded"}`}
+          style={{
+            position: "absolute",
+            right: "12px",
+            bottom: "12px",
+            zIndex: 1,
+          }}
         >
-          <button onClick={toggleCollapsed}>{Locale.NewChat.More}</button>
+          <button onClick={toggleCollapsed} className="code-fold-btn">
+            {collapsed ? Locale.NewChat.More : Locale.NewChat.Less}
+          </button>
         </div>
       );
     }
@@ -349,7 +503,7 @@ function CustomCode(props: { children: any; className?: string }) {
         ref={ref}
         style={{
           maxHeight: enableCodeFold && collapsed ? "400px" : "none",
-          overflowY: "hidden",
+          overflowY: enableCodeFold && collapsed ? "auto" : "visible",
         }}
       >
         {props.children}
@@ -465,25 +619,87 @@ function formatBoldText(text: string) {
     return `**${boldText}**${colon}`;
   });
 }
-function formatThinkText(text: string): string {
+
+function formatSearchText(
+  text: string,
+  searchingTime?: number,
+): {
+  searchText: string;
+  remainText: string;
+} {
+  text = text.trimStart();
+
+  // 检查是否以 <search> 开头但没有结束标签
+  if (text.startsWith("<search>") && !text.includes("</search>")) {
+    // 获取 <search> 后的所有内容
+    const searchContent = text.slice("<search>".length);
+    // 渲染为"搜索中"状态
+    const searchText = `<searchcollapse title="${Locale.NewChat.Searching}">\n${searchContent}\n\n</searchcollapse>\n`;
+    const remainText = ""; // 剩余文本为空
+    return { searchText, remainText };
+  }
+  const pattern = /^<search>([\s\S]*?)<\/search>/;
+  const match = text.match(pattern);
+
+  if (match) {
+    const searchContent = match[1];
+    let searchText = "";
+    if (searchContent.trim() === "") {
+      searchText = `<searchcollapse title="${Locale.NewChat.NoSearch}">\n\n</searchcollapse>\n`;
+    } else {
+      searchText = `<searchcollapse title="${
+        Locale.NewChat.Search
+      }${Locale.NewChat.ThinkFormat(
+        searchingTime,
+      )}">\n${searchContent}\n\n</searchcollapse>\n`;
+    }
+    const remainText = text.substring(match[0].length); // 提取剩余文本
+    return { searchText, remainText };
+  }
+
+  // 没有找到 search 标签
+  return { searchText: "", remainText: text };
+}
+
+function formatThinkText(
+  text: string,
+  thinkingTime?: number,
+): {
+  thinkText: string;
+  remainText: string;
+} {
+  text = text.trimStart();
   // 检查是否以 <think> 开头但没有结束标签
   if (text.startsWith("<think>") && !text.includes("</think>")) {
     // 获取 <think> 后的所有内容
     const thinkContent = text.slice("<think>".length);
     // 渲染为"思考中"状态
-    return `<thinkcollapse title="${Locale.NewChat.Thinking}">\n${thinkContent}\n</thinkcollapse>`;
+    const thinkText = `<thinkcollapse title="${Locale.NewChat.Thinking}">\n${thinkContent}\n\n</thinkcollapse>\n`;
+    const remainText = ""; // 剩余文本为空
+    return { thinkText, remainText };
   }
 
   // 处理完整的 think 标签
   const pattern = /^<think>([\s\S]*?)<\/think>/;
-  return text.replace(pattern, (match, thinkContent) => {
-    // 渲染为"思考完成"状态
-    // 如果 thinkContent 为空，则渲染为"没有思考过程"状态
+  const match = text.match(pattern);
+  if (match) {
+    const thinkContent = match[1];
+    let thinkText = "";
     if (thinkContent.trim() === "") {
-      return `<thinkcollapse title="${Locale.NewChat.NoThink}">\n</thinkcollapse>`;
+      thinkText = `<thinkcollapse title="${Locale.NewChat.NoThink}">\n\n</thinkcollapse>\n`;
+    } else {
+      thinkText = `<thinkcollapse title="${
+        Locale.NewChat.Think
+      }${Locale.NewChat.ThinkFormat(
+        thinkingTime,
+      )}">\n${thinkContent}\n\n</thinkcollapse>\n`;
     }
-    return `<thinkcollapse title="${Locale.NewChat.Think}">\n${thinkContent}\n</thinkcollapse>`;
-  });
+    const remainText = text.substring(match[0].length); // 提取剩余文本
+    return { thinkText, remainText };
+  }
+
+  // 没有找到 think 标签
+  return { thinkText: "", remainText: text };
 }
 
 function tryWrapHtmlCode(text: string) {
@@ -507,13 +723,52 @@ function tryWrapHtmlCode(text: string) {
     );
 }
 
-function R_MarkDownContent(props: { content: string; fontSize?: number }) {
+function ImagePreview({ src }: { src: string }) {
+  const handleClick = () => {
+    showImageModal(src); // 使用现有的 showImageModal 函数显示图片
+  };
+
+  return (
+    <img
+      src={src}
+      alt="Preview"
+      onClick={handleClick}
+      style={{
+        cursor: "zoom-in",
+        maxWidth: "200px",
+        maxHeight: "200px",
+        objectFit: "contain", // 保持图片比例
+        borderRadius: "8px", // 添加圆角
+        transition: "transform 0.2s ease",
+      }}
+      onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.05)")} // 悬停时轻微放大
+      onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")} // 鼠标离开时恢复
+    />
+  );
+}
+type ImgProps = React.ImgHTMLAttributes<HTMLImageElement> & {
+  src: string; // 强制 src 为 string
+};
+function R_MarkDownContent(props: {
+  content: string;
+  searchingTime?: number;
+  thinkingTime?: number;
+  fontSize?: number;
+}) {
   const escapedContent = useMemo(() => {
-    return tryWrapHtmlCode(
-      formatThinkText(
-        formatBoldText(escapeBrackets(escapeDollarNumber(props.content))),
-      ),
+    const originalContent = formatBoldText(
+      escapeBrackets(escapeDollarNumber(props.content)),
     );
+    const { searchText, remainText: searchRemainText } = formatSearchText(
+      originalContent,
+      props.searchingTime,
+    );
+    const { thinkText, remainText } = formatThinkText(
+      searchRemainText,
+      props.thinkingTime,
+    );
+    const content = searchText + thinkText + remainText;
+    return tryWrapHtmlCode(content);
   }, [props.content]);
 
   return (
@@ -536,6 +791,13 @@ function R_MarkDownContent(props: { content: string; fontSize?: number }) {
           pre: PreCode,
           code: CustomCode,
           p: (pProps: any) => <p {...pProps} dir="auto" />,
+          searchcollapse: ({
+            title,
+            children,
+          }: {
+            title?: string;
+            children: React.ReactNode;
+          }) => <SearchCollapse title={title}>{children}</SearchCollapse>,
           thinkcollapse: ({
             title,
             children,
@@ -569,6 +831,7 @@ function R_MarkDownContent(props: { content: string; fontSize?: number }) {
           },
           details: Details,
           summary: Summary,
+          img: ({ src, ...props }: ImgProps) => <ImagePreview src={src} />,
         } as any
       }
     >
@@ -579,6 +842,99 @@ function R_MarkDownContent(props: { content: string; fontSize?: number }) {
 
 export const MarkdownContent = React.memo(R_MarkDownContent);
 
+function detectCodeLanguage(code: string): string {
+  try {
+    const result = hljs.highlightAuto(code, [
+      "python",
+      "java",
+      "c",
+      "cpp",
+      "javascript",
+      "typescript",
+      "go",
+      "rust",
+      "html",
+      "css",
+      "sql",
+      "bash",
+      "json",
+      "yaml",
+      "xml",
+      "r",
+      "php",
+      "ruby",
+      "swift",
+      "kotlin",
+      "shell",
+      "perl",
+      "haskell",
+      "matlab",
+    ]);
+    return result.language || "text";
+  } catch (e) {
+    console.warn("Language detection failed:", e);
+    return "text";
+  }
+}
+function preprocessContent(content: string): string {
+  const lines = content.split("\n");
+  let inCodeBlock = false;
+  let codeBlockLines: string[] = [];
+  let result: string[] = [];
+  let hasLanguageTag = false; // 标记当前代码块是否有语言标注
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.trim().startsWith("```")) {
+      if (!inCodeBlock) {
+        // 开始新的代码块
+        inCodeBlock = true;
+        codeBlockLines = [];
+        hasLanguageTag = line.trim().length > 3;
+
+        if (hasLanguageTag) {
+          // 有语言标注，直接添加这一行
+          result.push(line);
+        }
+        // 无语言标注时不添加这一行，等待语言检测
+      } else {
+        // 代码块结束
+        inCodeBlock = false;
+        if (!hasLanguageTag && codeBlockLines.length > 0) {
+          // 只有在没有语言标注时才进行语言检测
+          const detectedLang = detectCodeLanguage(codeBlockLines.join("\n"));
+          result.push("```" + detectedLang);
+          result.push(...codeBlockLines);
+        }
+        result.push(line); // 添加结束标记
+      }
+    } else if (inCodeBlock) {
+      if (hasLanguageTag) {
+        // 有语言标注的代码块直接添加内容
+        result.push(line);
+      } else {
+        // 无语言标注的代码块先收集内容
+        codeBlockLines.push(line);
+      }
+    } else {
+      // 非代码块内容直接添加
+      result.push(line);
+    }
+  }
+
+  // 处理未闭合的代码块
+  if (inCodeBlock && !hasLanguageTag && codeBlockLines.length > 0) {
+    console.warn("Unclosed code block detected");
+    const detectedLang = detectCodeLanguage(codeBlockLines.join("\n"));
+    result.push("```" + detectedLang);
+    result.push(...codeBlockLines);
+    result.push("```");
+  }
+
+  return result.join("\n");
+}
+
 export function Markdown(
   props: {
     content: string;
@@ -586,16 +942,29 @@ export function Markdown(
     fontSize?: number;
     parentRef?: RefObject<HTMLDivElement>;
     defaultShow?: boolean;
+    searchingTime?: number;
+    thinkingTime?: number;
+    status?: boolean | undefined;
   } & React.DOMAttributes<HTMLDivElement>,
 ) {
   const mdRef = useRef<HTMLDivElement>(null);
 
+  // 使用 useMemo 缓存处理结果
+  const processedContent = useMemo(() => {
+    // 只在 key 为 "done" 时进行语言检测
+    if (!props.status) {
+      return preprocessContent(props.content);
+    }
+    // 其他情况直接返回原始内容
+    return props.content;
+  }, [props.content, props.status]);
+
   return (
     <div
       className="markdown-body"
-      style={{
-        fontSize: `${props.fontSize ?? 14}px`,
-      }}
+      // style={{
+      //   fontSize: `${props.fontSize ?? 14}px`,
+      // }}
       ref={mdRef}
       onContextMenu={props.onContextMenu}
       onDoubleClickCapture={props.onDoubleClickCapture}
@@ -604,7 +973,12 @@ export function Markdown(
       {props.loading ? (
         <LoadingIcon />
       ) : (
-        <MarkdownContent content={props.content} fontSize={props.fontSize} />
+        <MarkdownContent
+          content={processedContent}
+          searchingTime={props.searchingTime}
+          thinkingTime={props.thinkingTime}
+          fontSize={props.fontSize}
+        />
       )}
     </div>
   );

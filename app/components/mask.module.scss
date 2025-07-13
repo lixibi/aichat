@@ -70,11 +70,11 @@
 
         .mask-title {
           .mask-name {
-            font-size: 14px;
+            font-size: var(--text-sm);
             font-weight: bold;
           }
           .mask-info {
-            font-size: 12px;
+            font-size: var(--text-xs);
           }
         }
       }

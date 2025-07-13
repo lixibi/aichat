@@ -5,9 +5,9 @@ import { GEMINI_BASE_URL, Google, ModelProvider } from "@/app/constant";
 
 async function handle(
   req: NextRequest,
-  { params }: { params: { path: string[] } },
+  // { params }: { params: { path: string[] } },
 ) {
-  console.log("[Google Route] params ", params);
+  // console.log("[Google Route] params ", params);
 
   if (req.method === "OPTIONS") {
     return NextResponse.json({ body: "OK" }, { status: 200 });

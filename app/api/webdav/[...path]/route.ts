@@ -19,11 +19,16 @@ const normalizeUrl = (url: string) => {
 
 async function handle(
   req: NextRequest,
-  { params }: { params: { path: string[] } },
+  // { params }: { params: { path: string[] } },
 ) {
   if (req.method === "OPTIONS") {
     return NextResponse.json({ body: "OK" }, { status: 200 });
   }
+  // Extract path from URL
+  const pathParts = req.nextUrl.pathname.split("/");
+  // Remove empty parts and the "api" prefix (adjust this based on your actual route structure)
+  const pathParams = pathParts.slice(3); // Adjust the slice index based on your route structure
+
   const folder = STORAGE_KEY;
   const fileName = `${folder}/backup.json`;
 
@@ -62,11 +67,15 @@ async function handle(
     endpoint += "/";
   }
 
-  const endpointPath = params.path.join("/");
+  const endpointPath = pathParams.join("/");
   const targetPath = `${endpoint}${endpointPath}`;
 
   // only allow MKCOL, GET, PUT
-  if (proxy_method !== "MKCOL" && proxy_method !== "GET" && proxy_method !== "PUT") {
+  if (
+    proxy_method !== "MKCOL" &&
+    proxy_method !== "GET" &&
+    proxy_method !== "PUT"
+  ) {
     return NextResponse.json(
       {
         error: true,

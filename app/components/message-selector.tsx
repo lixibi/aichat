@@ -75,7 +75,15 @@ export function MessageSelector(props: {
   const session = chatStore.currentSession();
   const isValid = (m: ChatMessage) => m.content && !m.isError && !m.streaming;
   const allMessages = useMemo(() => {
-    let startIndex = Math.max(0, session.clearContextIndex ?? 0);
+    const totalMessageCount = session.messages.length;
+    let clearContextIndex = session.clearContextIndex ?? 0;
+    for (let i = totalMessageCount - 1; i >= 0; i--) {
+      if (session.messages[i].beClear === true) {
+        clearContextIndex = i + 1;
+        break;
+      }
+    }
+    let startIndex = Math.max(0, clearContextIndex);
     if (startIndex === session.messages.length - 1) {
       startIndex = 0;
     }
@@ -120,7 +128,16 @@ export function MessageSelector(props: {
       messages.forEach((m) => selection.add(m.id!)),
     );
   };
-
+  const HideUserContinueMsg = () => {
+    props.updateSelection((selection) => {
+      messages.forEach((m) => {
+        const shouldHideMsg = m.role === "user" && m.isContinuePrompt === true;
+        if (shouldHideMsg) {
+          selection.delete(m.id!);
+        }
+      });
+    });
+  };
   useEffect(() => {
     if (props.defaultSelectAll) {
       selectAll();
@@ -184,6 +201,12 @@ export function MessageSelector(props: {
             onClick={() =>
               props.updateSelection((selection) => selection.clear())
             }
+          />
+          <IconButton
+            text={Locale.Select.HideUserContinueMsg}
+            bordered
+            className={styles["filter-item"]}
+            onClick={HideUserContinueMsg}
           />
         </div>
       </div>

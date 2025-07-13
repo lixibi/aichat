@@ -20,7 +20,7 @@
   .title {
     text-align: center;
     margin-bottom: 10px;
-    font-size: 18px;
+    font-size: var(--text-lg);
     color: var(--black);
   }
   .window-action-button {
@@ -40,7 +40,7 @@
     display: block;
     margin-bottom: 6px;
     font-weight: bold;
-    font-size: 14px;
+    font-size: var(--text-sm);
     color: var(--text-color-secondary);
   }
 
@@ -51,7 +51,7 @@
     padding: 6px 10px;
     border: var(--border-in-light);
     border-radius: 5px;
-    font-size: 14px;
+    font-size: var(--text-sm);
     margin-right: 0.2rem;
     box-sizing: border-box;
     transition: border-color 0.3s ease;
@@ -79,7 +79,7 @@
     flex: 1;
     padding: 10px 20px;
     margin-bottom: 5px;
-    font-size: 14px;
+    font-size: var(--text-sm);
     color: var(--white);
     background-color: var(--primary);
     border: none;
@@ -101,7 +101,7 @@
     margin-top: 15px;
     text-align: center;
     font-weight: bold;
-    font-size: 16px;
+    font-size: var(--text-base);
     color: var(--text-color);
   }
 }
@@ -116,31 +116,60 @@
 
   // 滚动条样式
   scrollbar-width: thin; /* Firefox */
-  scrollbar-color: #3298eb #f1f1f1; /* Firefox */
+  scrollbar-color: var(--primary) var(--second); /* Firefox */
 
   .fileListContainer::-webkit-scrollbar {
-    width: 16px;
+    width: 20px;
   }
 
   .fileListContainer::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: var(--second);
     border-radius: 8px;
   }
 
   .fileListContainer::-webkit-scrollbar-thumb {
-    background:  #3298eb;
+    background:  var(--primary);
     border-radius: 8px;
   }
 
   .fileListContainer::-webkit-scrollbar-thumb:hover {
-    background: #499ee5;
+    background: var(--hover-color);
   }
 
   .subtitle {
-    font-size: 18px;
+    font-size: var(--text-lg);
     color: var(--black);
     margin-bottom: 18px;
     text-align: center;
+  }
+
+  /* 添加搜索框样式 */
+  .searchContainer {
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: center;
+  }
+  .searchInput {
+    width: 90%;
+    padding: 8px 12px;
+    border: var(--border-in-light);
+    border-radius: 5px;
+    font-size: var(--text-sm);
+    background-color: var(--white);
+    color: var(--black);
+    transition: border-color 0.3s ease;
+    &:focus {
+      border-color: var(--primary);
+      outline: none;
+    }
+  }
+  
+  /* 无搜索结果提示样式 */
+  .noResults {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-color-secondary);
+    font-style: italic;
   }
 
   .list {
@@ -166,7 +195,7 @@
 
     .fileInfo {
       flex: 2;
-      font-size: 14px;
+      font-size: var(--text-sm);
       color: var(--text-color-secondary);
       word-break: break-all;
     }
@@ -176,7 +205,7 @@
       padding: 6px 10px;
       border: var(--border-in-light);
       border-radius: 4px;
-      font-size: 13px;
+      font-size: var(--text-sm);
       box-sizing: border-box;
       background-color: var(--white);
       color: var(--black);
@@ -191,7 +220,7 @@
 
     .actionButton {
       padding: 6px 10px;
-      font-size: 13px;
+      font-size: var(--text-sm);
       color: var(--white);
       background-color: var(--primary);
       border: none;
@@ -200,7 +229,7 @@
       transition: background-color 0.3s ease;
 
       &:hover:not(:disabled) {
-        background-color: var(--primary-hover);
+        opacity: 0.8;
       }
 
       &:disabled {
@@ -217,7 +246,7 @@
     padding: 15px;
 
     .title {
-      font-size: 20px;
+      font-size: var(--text-xl);
       margin-bottom: 15px;
     }
 
@@ -246,6 +275,13 @@
     padding: 10px;
     max-height: 60vh; /* 限制列表区域高度，确保文件可以滚动到底部 */
 
+    .searchContainer {
+      margin-bottom: 10px;
+    }
+    .searchInput {
+      width: 100%;
+    }
+    
     .listItem {
       flex-direction: column;
       align-items: flex-start;

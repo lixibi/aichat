@@ -9,6 +9,7 @@ import React, {
   RefObject,
   useLayoutEffect,
 } from "react";
+import clsx from "clsx";
 
 import SendWhiteIcon from "../icons/send-white.svg";
 import BrainIcon from "../icons/brain.svg";
@@ -21,23 +22,24 @@ import SpeakStopIcon from "../icons/speak-stop.svg";
 import LoadingIcon from "../icons/three-dots.svg";
 import LoadingButtonIcon from "../icons/loading.svg";
 import PromptIcon from "../icons/prompt.svg";
-import MaskIcon from "../icons/mask.svg";
+// import MaskIcon from "../icons/mask.svg";
 import MaxIcon from "../icons/max.svg";
 import MinIcon from "../icons/min.svg";
 import ResetIcon from "../icons/reload.svg";
 import BreakIcon from "../icons/break.svg";
 import SettingsIcon from "../icons/chat-settings.svg";
 import DeleteIcon from "../icons/clear.svg";
-import PinIcon from "../icons/pin.svg";
+// import PinIcon from "../icons/pin.svg";
 import EditIcon from "../icons/rename.svg";
 import EditToInputIcon from "../icons/edit_input.svg";
 import ConfirmIcon from "../icons/confirm.svg";
 import CancelIcon from "../icons/cancel.svg";
-import ImageIcon from "../icons/image.svg";
+import ContinueIcon from "../icons/continue.svg";
+// import ImageIcon from "../icons/image.svg";
 
-import LightIcon from "../icons/light.svg";
-import DarkIcon from "../icons/dark.svg";
-import AutoIcon from "../icons/auto.svg";
+// import LightIcon from "../icons/light.svg";
+// import DarkIcon from "../icons/dark.svg";
+// import AutoIcon from "../icons/auto.svg";
 import BottomIcon from "../icons/bottom.svg";
 import StopIcon from "../icons/pause.svg";
 import RobotIcon from "../icons/robot.svg";
@@ -49,6 +51,14 @@ import ReloadIcon from "../icons/reload.svg";
 import TranslateIcon from "../icons/translate.svg";
 import OcrIcon from "../icons/ocr.svg";
 import PrivacyIcon from "../icons/privacy.svg";
+import PrivacyModeIcon from "../icons/incognito.svg";
+import ImprovePromptIcon from "../icons/lightOn.svg";
+// import UploadDocIcon from "../icons/upload-doc.svg";
+import CollapseIcon from "../icons/collapse.svg";
+import ExpandIcon from "../icons/expand.svg";
+import AttachmentIcon from "../icons/paperclip.svg";
+import ToolboxIcon from "../icons/toolbox.svg";
+import EraserIcon from "../icons/eraser.svg";
 
 import {
   ChatMessage,
@@ -70,17 +80,26 @@ import {
   useMobileScreen,
   getMessageTextContent,
   getMessageImages,
+  getMessageFiles,
   isVisionModel,
   safeLocalStorage,
+  isThinkingModel,
+  wrapThinkingPart,
+  countTokens,
+  saveModelConfig,
 } from "../utils";
+import { estimateTokenLengthInLLM } from "@/app/utils/token";
 
+import type { UploadFile } from "../client/api";
 import { uploadImage as uploadImageRemote } from "@/app/utils/chat";
+import { uploadFileRemote } from "@/app/utils/chat";
 import Image from "next/image";
 
 import dynamic from "next/dynamic";
 
 import { ChatControllerPool } from "../client/controller";
 import { Prompt, usePromptStore } from "../store/prompt";
+import { useExpansionRulesStore } from "../store/expansionRules";
 import Locale from "../locales";
 
 import { IconButton } from "./button";
@@ -96,6 +115,8 @@ import {
   showToast,
 } from "./ui-lib";
 import { useNavigate } from "react-router-dom";
+import { FileIcon, defaultStyles } from "react-file-icon";
+import type { DefaultExtensionType } from "react-file-icon";
 import {
   CHAT_PAGE_SIZE,
   DEFAULT_TTS_ENGINE,
@@ -104,6 +125,10 @@ import {
   REQUEST_TIMEOUT_MS,
   UNFINISHED_INPUT,
   ServiceProvider,
+  MAX_DOC_CNT,
+  textFileExtensions,
+  maxFileSizeInKB,
+  minTokensForPastingAsFile,
 } from "../constant";
 import { Avatar } from "./emoji";
 import { ContextPrompts, MaskAvatar, MaskConfig } from "./mask";
@@ -117,8 +142,8 @@ import {
 import { prettyObject } from "../utils/format";
 import { ExportMessageModal } from "./exporter";
 import { getClientConfig } from "../config/client";
-import { useAllModels } from "../utils/hooks";
-import { MultimodalContent, getClientApi } from "../client/api";
+import { useAllModelsWithCustomProviders } from "../utils/hooks";
+import { Model, MultimodalContent, getClientApi } from "../client/api";
 
 import { ClientApi } from "../client/api";
 import { createTTSPlayer } from "../utils/audio";
@@ -352,17 +377,20 @@ export function PromptHints(props: {
   );
 }
 
-function ClearContextDivider() {
+// function ClearContextDivider() {
+function ClearContextDivider(props: { index: number }) {
   const chatStore = useChatStore();
   const session = chatStore.currentSession();
   return (
     <div
       className={styles["clear-context"]}
       onClick={() =>
-        chatStore.updateTargetSession(
-          session,
-          (session) => (session.clearContextIndex = undefined),
-        )
+        chatStore.updateTargetSession(session, (session) => {
+          session.clearContextIndex = undefined;
+          if (props.index > 0) {
+            session.messages[props.index - 1].beClear = false;
+          }
+        })
       }
     >
       <div className={styles["clear-context-tips"]}>{Locale.Context.Clear}</div>
@@ -472,10 +500,83 @@ function useScrollToBottom(
   };
 }
 
+const ReplaceTextModal = ({
+  onClose,
+  onReplace,
+}: {
+  onClose: () => void;
+  onReplace: (search: string, replace: string) => void;
+}) => {
+  const [searchText, setSearchText] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+
+  return (
+    <div className="modal-mask">
+      <Modal
+        title={Locale.Chat.InputActions.ReplaceText.Title}
+        onClose={onClose}
+        actions={[
+          <IconButton
+            key="cancel"
+            icon={<CancelIcon />}
+            type="info"
+            text={Locale.UI.Cancel}
+            onClick={onClose}
+          />,
+          <IconButton
+            key="confirm"
+            icon={<ConfirmIcon />}
+            type="primary"
+            text={Locale.UI.Replace}
+            onClick={() => {
+              if (!searchText.trim()) {
+                showToast(
+                  Locale.Chat.InputActions.ReplaceText.EmptySearchToast,
+                );
+                return;
+              }
+              onReplace(searchText, replaceText);
+            }}
+          />,
+        ]}
+      >
+        <List>
+          <ListItem title={Locale.Chat.InputActions.ReplaceText.SearchText}>
+            <input
+              type="text"
+              className={styles["replace-text-input"]}
+              value={searchText}
+              placeholder={
+                Locale.Chat.InputActions.ReplaceText.SearchPlaceholder
+              }
+              onChange={(e) => setSearchText(e.target.value)}
+              autoFocus
+            />
+          </ListItem>
+          <ListItem title={Locale.Chat.InputActions.ReplaceText.ReplaceText}>
+            <input
+              type="text"
+              className={styles["replace-text-input"]}
+              value={replaceText}
+              placeholder={
+                Locale.Chat.InputActions.ReplaceText.ReplacePlaceholder
+              }
+              onChange={(e) => setReplaceText(e.target.value)}
+            />
+          </ListItem>
+        </List>
+      </Modal>
+    </div>
+  );
+};
+
 export function ChatActions(props: {
+  uploadDocument: () => void;
   uploadImage: () => Promise<string[]>;
   attachImages: string[];
   setAttachImages: (images: string[]) => void;
+  attachFiles: UploadFile[];
+  setAttachFiles: (files: UploadFile[]) => void;
   setUploading: (uploading: boolean) => void;
   showPromptModal: () => void;
   scrollToBottom: () => void;
@@ -485,21 +586,103 @@ export function ChatActions(props: {
   setShowShortcutKeyModal: React.Dispatch<React.SetStateAction<boolean>>;
   userInput: string;
   setUserInput: (input: string) => void;
+  modelTable: Model[];
 }) {
   const config = useAppConfig();
   const navigate = useNavigate();
   const chatStore = useChatStore();
   const session = chatStore.currentSession();
+  const access = useAccessStore();
+
+  const [showTools, setShowTools] = useState(false);
+  const toolsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showTools) return; // 菜单没开时不监听，省一次注册
+    const handle = (e: MouseEvent) => {
+      // 如果点击点不在 toolsRef 的 DOM 树里，则关闭
+      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
+        setShowTools(false);
+      }
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [showTools]);
 
   // translate
   const [isTranslating, setIsTranslating] = useState(false);
+  const [originalTextForTranslate, setOriginalTextForTranslate] = useState<
+    string | null
+  >(null);
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
   // ocr
   const [isOCRing, setIsOCRing] = useState(false);
+  // improve prompt
+  const [isImprovingPrompt, setIsImprovingPrompt] = useState(false);
+  const [originalPromptForImproving, setOriginalPromptForImproving] = useState<
+    string | null
+  >(null);
+  const [optimizedPrompt, setOptimizedPrompt] = useState<string | null>(null);
   // privacy
   const [isPrivacying, setIsPrivacying] = useState(false);
-  const { translateModel, ocrModel } = useAccessStore();
+  const [originalTextForPrivacy, setOriginalTextForPrivacy] = useState<
+    string | null
+  >(null);
+  const [privacyProcessedText, setPrivacyProcessedText] = useState<
+    string | null
+  >(null);
+  const [originalTextForClear, setOriginalTextForClear] = React.useState<
+    string | null
+  >(null);
+  const [isReplacing, setIsReplacing] = useState(false);
+  const [originalTextForReplace, setOriginalTextForReplace] = useState<
+    string | null
+  >(null);
+  const [replacedText, setReplacedText] = useState<string | null>(null);
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
+  // continue chat
+  const [isContinue, setIsContinue] = useState(false);
+  // model
+
+  // 监听用户输入变化，如果输入改变则重置撤销状态
+  useEffect(() => {
+    // 当用户输入变化时，检查是否需要重置撤销状态
+    if (
+      originalTextForTranslate !== null &&
+      props.userInput.trim() !== translatedText?.trim()
+    ) {
+      // 如果当前输入与原始输入不同，则重置翻译的撤销状态
+      setOriginalTextForTranslate(null);
+      setTranslatedText(null);
+    }
+
+    if (
+      originalPromptForImproving !== null &&
+      props.userInput.trim() !== optimizedPrompt?.trim()
+    ) {
+      // 如果当前输入与原始输入不同，则重置翻译的撤销状态
+      setOriginalPromptForImproving(null);
+      setOptimizedPrompt(null);
+    }
+
+    if (
+      originalTextForPrivacy !== null &&
+      props.userInput.trim() !== privacyProcessedText
+    ) {
+      // 如果当前输入与经过隐私处理的原始输入不同，则重置隐私处理的撤销状态
+      setOriginalTextForPrivacy(null);
+      setPrivacyProcessedText(null);
+    }
+  }, [props.userInput]);
 
   const handleTranslate = async () => {
+    if (originalTextForTranslate !== null) {
+      // 执行撤销操作
+      props.setUserInput(originalTextForTranslate);
+      setOriginalTextForTranslate(null);
+      setTranslatedText(null);
+      showToast(Locale.Chat.InputActions.Translate.UndoToast);
+      return;
+    }
     if (props.userInput.trim() === "") {
       showToast(Locale.Chat.InputActions.Translate.BlankToast);
       return;
@@ -507,37 +690,53 @@ export function ChatActions(props: {
     setIsTranslating(true);
     showToast(Locale.Chat.InputActions.Translate.isTranslatingToast);
     //
-    const [translateModelName, translateProviderName] =
-      translateModel.split(/@(?=[^@]*$)/);
-    if (translateModelName) {
-      session.mask.modelConfig.translateModel = translateModelName;
-      if (translateProviderName) {
-        session.mask.modelConfig.translateProviderName =
-          translateProviderName as ServiceProvider;
-      }
-    }
     const modelConfig = session.mask.modelConfig;
+    // let translateModel = modelConfig.translateModel;
+    // let providerName = modelConfig.translateProviderName;
+    let textProcessModel = modelConfig.textProcessModel;
+    let providerName = modelConfig.textProcessProviderName;
 
-    const providerName = modelConfig.translateProviderName;
+    if ((!textProcessModel || !providerName) && access.textProcessModel) {
+      let providerNameStr;
+      [textProcessModel, providerNameStr] =
+        access.textProcessModel.split(/@(?=[^@]*$)/);
+      providerName = providerNameStr as ServiceProvider;
+    }
+
     const api: ClientApi = getClientApi(providerName);
     api.llm.chat({
       messages: [
         {
+          role: "system",
+          content: `${Locale.Chat.InputActions.Translate.SystemPrompt}`,
+        },
+        {
           role: "user",
-          content: `${Locale.Chat.InputActions.Translate.TranslatePrompt} ${props.userInput}`,
+          content: `${Locale.Chat.InputActions.Translate.UserPrompt} ${props.userInput}`,
         },
       ],
       config: {
-        model: modelConfig.translateModel,
+        model: textProcessModel,
         stream: false,
       },
       onFinish(message, responseRes) {
         if (responseRes?.status === 200) {
+          if (typeof message !== "string") {
+            message = message.content;
+          }
           if (!isValidMessage(message)) {
             showToast(Locale.Chat.InputActions.Translate.FailTranslateToast);
             return;
           }
-          props.setUserInput(message);
+
+          let translatedContent = message;
+          translatedContent = translatedContent || props.userInput; // 避免空翻译无法撤销
+
+          // 保存原始文本和翻译结果以便撤销
+          setOriginalTextForTranslate(props.userInput);
+          setTranslatedText(translatedContent);
+          props.setUserInput(translatedContent);
+
           showToast(Locale.Chat.InputActions.Translate.SuccessTranslateToast);
         } else {
           showToast(Locale.Chat.InputActions.Translate.FailTranslateToast);
@@ -550,7 +749,7 @@ export function ChatActions(props: {
     let uploadedImages: string[] = props.attachImages || [];
     if (isEmpty(props.attachImages)) {
       uploadedImages = await props.uploadImage();
-      console.log("uploadedImages", uploadedImages);
+      // console.log("uploadedImages", uploadedImages);
       // 如果上传后仍然没有图片，则退出
       if (isEmpty(uploadedImages)) {
         showToast(Locale.Chat.InputActions.OCR.BlankToast);
@@ -560,16 +759,14 @@ export function ChatActions(props: {
     setIsOCRing(true);
     showToast(Locale.Chat.InputActions.OCR.isDetectingToast);
     //
-    const [ocrModelName, ocrProviderName] = ocrModel.split(/@(?=[^@]*$)/);
-    if (ocrModelName) {
-      session.mask.modelConfig.ocrModel = ocrModelName;
-      if (ocrProviderName) {
-        session.mask.modelConfig.translateProviderName =
-          ocrProviderName as ServiceProvider;
-      }
-    }
     const modelConfig = session.mask.modelConfig;
-    const providerName = modelConfig.translateProviderName;
+    let ocrModel = modelConfig.ocrModel;
+    let providerName = modelConfig.ocrProviderName;
+    if ((!ocrModel || !providerName) && access.ocrModel) {
+      let providerNameStr;
+      [ocrModel, providerNameStr] = access.ocrModel.split(/@(?=[^@]*$)/);
+      providerName = providerNameStr as ServiceProvider;
+    }
 
     const api: ClientApi = getClientApi(providerName);
     let textValue = Locale.Chat.InputActions.OCR.DetectPrompt;
@@ -593,11 +790,14 @@ export function ChatActions(props: {
         },
       ],
       config: {
-        model: modelConfig.ocrModel,
+        model: ocrModel,
         stream: false,
       },
       onFinish(message, responseRes) {
         if (responseRes?.status === 200) {
+          if (typeof message !== "string") {
+            message = message.content;
+          }
           if (!isValidMessage(message)) {
             showToast(Locale.Chat.InputActions.OCR.FailDetectToast);
             return;
@@ -614,7 +814,88 @@ export function ChatActions(props: {
       },
     });
   };
+  const handleImprovePrompt = async () => {
+    if (originalPromptForImproving !== null) {
+      // 执行撤销操作
+      props.setUserInput(originalPromptForImproving);
+      setOriginalPromptForImproving(null);
+      setOptimizedPrompt(null);
+      showToast(Locale.Chat.InputActions.ImprovePrompt.UndoToast);
+      return;
+    }
+    if (props.userInput.trim() === "") {
+      showToast(Locale.Chat.InputActions.ImprovePrompt.BlankToast);
+      return;
+    }
+    setIsImprovingPrompt(true);
+    showToast(Locale.Chat.InputActions.ImprovePrompt.isImprovingToast);
+    //
+    const modelConfig = session.mask.modelConfig;
+    let textProcessModel = modelConfig.textProcessModel;
+    let providerName = modelConfig.textProcessProviderName;
+    if ((!textProcessModel || !providerName) && access.textProcessModel) {
+      let providerNameStr;
+      [textProcessModel, providerNameStr] =
+        access.textProcessModel.split(/@(?=[^@]*$)/);
+      providerName = providerNameStr as ServiceProvider;
+    }
+
+    const api: ClientApi = getClientApi(providerName);
+    api.llm.chat({
+      messages: [
+        {
+          role: "system",
+          content: `${Locale.Chat.InputActions.ImprovePrompt.SystemPrompt}`,
+        },
+        {
+          role: "user",
+          content: `${Locale.Chat.InputActions.ImprovePrompt.UserPrompt} ${props.userInput}`,
+        },
+      ],
+      config: {
+        model: textProcessModel,
+        stream: false,
+      },
+      onFinish(message, responseRes) {
+        if (responseRes?.status === 200) {
+          if (typeof message !== "string") {
+            message = message.content;
+          }
+          if (!isValidMessage(message)) {
+            showToast(
+              Locale.Chat.InputActions.ImprovePrompt.FailImprovingToast,
+            );
+            return;
+          }
+
+          let optimizedContent = message;
+          optimizedContent = optimizedContent || props.userInput; // 避免空翻译无法撤销
+
+          // 保存原始文本和翻译结果以便撤销
+          setOriginalPromptForImproving(props.userInput);
+          setOptimizedPrompt(optimizedContent);
+          props.setUserInput(optimizedContent);
+
+          showToast(
+            Locale.Chat.InputActions.ImprovePrompt.SuccessImprovingToast,
+          );
+        } else {
+          showToast(Locale.Chat.InputActions.ImprovePrompt.FailImprovingToast);
+        }
+        setIsImprovingPrompt(false);
+      },
+    });
+  };
   const handlePrivacy = async () => {
+    if (originalTextForPrivacy !== null) {
+      // 执行撤销操作
+      props.setUserInput(originalTextForPrivacy);
+      setOriginalTextForPrivacy(null);
+      setPrivacyProcessedText(null);
+      showToast(Locale.Chat.InputActions.Privacy.UndoToast);
+      return;
+    }
+
     if (props.userInput.trim() === "") {
       showToast(Locale.Chat.InputActions.Privacy.BlankToast);
       return;
@@ -622,10 +903,87 @@ export function ChatActions(props: {
     setIsPrivacying(true);
     showToast(Locale.Chat.InputActions.Privacy.isPrivacyToast);
     const markedText = maskSensitiveInfo(props.userInput);
+    // 保存原始文本以便撤销
+    setOriginalTextForPrivacy(props.userInput);
+    setPrivacyProcessedText(markedText);
     props.setUserInput(markedText);
+
     showToast(Locale.Chat.InputActions.Privacy.SuccessPrivacyToast);
     setIsPrivacying(false);
   };
+  const handleClearInput = async () => {
+    if (originalTextForClear !== null) {
+      // 撤销清空
+      props.setUserInput(originalTextForClear);
+      setOriginalTextForClear(null);
+      showToast(Locale.Chat.InputActions.ClearInput.UndoToast);
+      return;
+    }
+    if (props.userInput.trim() === "") {
+      showToast(Locale.Chat.InputActions.ClearInput.BlankToast);
+      return;
+    }
+    // 保存当前输入用于撤销
+    setOriginalTextForClear(props.userInput);
+    props.setUserInput("");
+    showToast(Locale.Chat.InputActions.ClearInput.SuccessClearChatToast);
+  };
+  const handleReplaceText = async () => {
+    if (originalTextForReplace !== null) {
+      // Execute undo operation
+      props.setUserInput(originalTextForReplace);
+      setOriginalTextForReplace(null);
+      setReplacedText(null);
+      showToast(Locale.Chat.InputActions.ReplaceText.UndoToast);
+      return;
+    }
+
+    if (props.userInput.trim() === "") {
+      showToast(Locale.Chat.InputActions.ReplaceText.BlankToast);
+      return;
+    }
+
+    setShowReplaceModal(true);
+  };
+  const handleReplaceOperation = (searchText: string, replaceText: string) => {
+    setIsReplacing(true);
+    showToast(Locale.Chat.InputActions.ReplaceText.isReplacingToast);
+
+    try {
+      // 保存原始文本以便可能的撤销
+      setOriginalTextForReplace(props.userInput);
+
+      // 执行替换
+      const newText = props.userInput.split(searchText).join(replaceText);
+
+      if (newText === props.userInput) {
+        showToast(`未找到"${searchText}"，无法替换`);
+        setOriginalTextForReplace(null);
+      } else {
+        setReplacedText(newText);
+        props.setUserInput(newText);
+        showToast(`替换完成：${searchText} → ${replaceText}`);
+      }
+    } catch (error) {
+      console.error("Text replacement error:", error);
+      showToast("替换时出错");
+    } finally {
+      setIsReplacing(false);
+      setShowReplaceModal(false);
+    }
+  };
+  // Add this to the useEffect monitoring userInput
+  useEffect(() => {
+    // When user input changes, check if we need to reset replacement state
+    if (
+      originalTextForReplace !== null &&
+      props.userInput.trim() !== replacedText?.trim()
+    ) {
+      // If current input is different from the replaced text, reset replacement state
+      setOriginalTextForReplace(null);
+      setReplacedText(null);
+    }
+  }, [props.userInput]);
   function maskSensitiveInfo(text: string): string {
     // 手机号: 保留前3位和后4位
     const maskPhone = (match: string): string => {
@@ -677,6 +1035,20 @@ export function ChatActions(props: {
 
     return maskedText;
   }
+  const handleContinueChat = async () => {
+    setIsContinue(true);
+    showToast(Locale.Chat.InputActions.Continue.isContinueToast);
+
+    const continuePrompt = config.customUserContinuePrompt
+      ? config.customUserContinuePrompt
+      : Locale.Chat.InputActions.Continue.ContinuePrompt;
+    chatStore
+      .onUserInput(continuePrompt, [], [], true)
+      .then(() => setIsContinue(false));
+    chatStore.setLastInput(continuePrompt);
+    setIsContinue(false);
+  };
+
   function isValidMessage(message: any): boolean {
     if (typeof message !== "string") {
       return false;
@@ -700,7 +1072,141 @@ export function ChatActions(props: {
     }
     return true;
   }
+  // 统一的文件上传处理函数
+  const handleFileUpload = () => {
+    if (props.uploading) return;
 
+    // 创建文件输入元素
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+
+    // // 设置接受的文件类型
+    // if (canUploadImage) {
+    //   // 支持图片和文本文件
+    //   const imageTypes =
+    //     "image/png, image/jpeg, image/webp, image/heic, image/heif";
+    //   const textTypes = textFileExtensions.map((ext) => `.${ext}`).join(",");
+    //   fileInput.accept = `${imageTypes}, ${textTypes}`;
+    // } else {
+    //   // 只支持文本文件
+    //   fileInput.accept = textFileExtensions.map((ext) => `.${ext}`).join(",");
+    // }
+
+    // Always accept image files, regardless of model
+    const imageTypes =
+      "image/png, image/jpeg, image/webp, image/heic, image/heif";
+    const textTypes = textFileExtensions.map((ext) => `.${ext}`).join(",");
+    fileInput.accept = `${imageTypes}, ${textTypes}`;
+    fileInput.multiple = true;
+
+    fileInput.onchange = async (event: any) => {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+
+      setUploading(true);
+
+      const imageFiles: File[] = [];
+      const textFiles: File[] = [];
+
+      // 分类文件
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith("image/")) {
+          imageFiles.push(file);
+          // if (canUploadImage) {
+          //   imageFiles.push(file);
+          // } else {
+          //   showToast(
+          //     Locale.Chat.InputActions.UploadFile.UnsupportToUploadImage,
+          //   );
+          //   continue;
+          // }
+        } else {
+          textFiles.push(file);
+        }
+      }
+
+      // 处理图片文件
+      if (imageFiles.length > 0) {
+        const images = [...props.attachImages];
+
+        for (const file of imageFiles) {
+          try {
+            const dataUrl = await uploadImageRemote(file);
+            images.push(dataUrl);
+          } catch (e) {
+            console.error("Error uploading image:", e);
+            showToast(String(e));
+          }
+        }
+
+        // 限制图片数量
+        if (images.length > 3) {
+          images.splice(3, images.length - 3);
+        }
+
+        props.setAttachImages(images);
+      }
+
+      // 处理文本文件
+      if (textFiles.length > 0) {
+        const files = [...props.attachFiles];
+
+        for (const file of textFiles) {
+          try {
+            const data = await uploadFileRemote(file);
+            const tokenCount: number = countTokens(data.content);
+            const fileData: UploadFile = {
+              name: file.name,
+              url: data.content,
+              contentType: data.type,
+              size: parseFloat((file.size / 1024).toFixed(2)),
+              tokenCount: tokenCount,
+            };
+
+            // 限制文件大小
+            if (fileData?.size && fileData?.size > maxFileSizeInKB) {
+              showToast(Locale.Chat.InputActions.UploadFile.FileTooLarge);
+              continue;
+            }
+
+            // 检查是否有同名且内容相同的文件
+            const isDuplicate = files.some(
+              (existingFile) =>
+                existingFile.name === fileData.name &&
+                existingFile.url === fileData.url,
+            );
+
+            if (isDuplicate) {
+              showToast(
+                Locale.Chat.InputActions.UploadFile.DuplicateFile(file.name),
+              );
+              continue;
+            }
+
+            if (data.content && tokenCount > 0) {
+              files.push(fileData);
+            }
+          } catch (e) {
+            console.error("Error uploading file:", e);
+            showToast(String(e));
+          }
+        }
+
+        // 限制文件数量
+        if (files.length > MAX_DOC_CNT) {
+          files.splice(MAX_DOC_CNT, files.length - MAX_DOC_CNT);
+          showToast(Locale.Chat.InputActions.UploadFile.TooManyFile);
+        }
+
+        props.setAttachFiles(files);
+      }
+
+      setUploading(false);
+    };
+
+    fileInput.click();
+  };
   // switch themes
   const theme = config.theme;
   function nextTheme() {
@@ -716,26 +1222,33 @@ export function ChatActions(props: {
   const stopAll = () => ChatControllerPool.stopAll();
 
   // switch model
-  const currentModel = chatStore.currentSession().mask.modelConfig.model;
+  const models = props.modelTable;
+  const currentModel = session.mask.modelConfig.model;
   const currentProviderName =
     session.mask.modelConfig?.providerName || ServiceProvider.OpenAI;
-  const allModels = useAllModels();
-  const models = useMemo(() => {
-    const filteredModels = allModels.filter((m) => m.available);
-    const defaultModel = filteredModels.find((m) => m.isDefault);
+  const [currentModelInfo, setCurrentModelInfo] = useState<Model | null>(null);
+  useEffect(() => {
+    const _currentModel =
+      models.find(
+        (m) =>
+          m.name === currentModel &&
+          m.provider?.providerName === currentProviderName,
+      ) || null;
+    setCurrentModelInfo(_currentModel);
+  }, [
+    models,
+    session.mask.modelConfig.model,
+    session.messages,
+    currentModel,
+    currentProviderName,
+  ]);
+  const canUploadImage =
+    isVisionModel(currentModel) || !!currentModelInfo?.enableVision;
 
-    if (defaultModel) {
-      const arr = [
-        defaultModel,
-        ...filteredModels.filter((m) => m !== defaultModel),
-      ];
-      return arr;
-    } else {
-      return filteredModels;
-    }
-  }, [allModels]);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showUploadImage, setShowUploadImage] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
+  const toggleMobileActions = () => setShowMobileActions(!showMobileActions);
 
   const isMobileScreen = useMobileScreen();
   const { setAttachImages, setUploading } = props;
@@ -744,7 +1257,7 @@ export function ChatActions(props: {
     const show = isVisionModel(currentModel);
     setShowUploadImage(show);
     if (!show) {
-      setAttachImages([]);
+      // setAttachImages([]);
       setUploading(false);
     }
 
@@ -766,7 +1279,7 @@ export function ChatActions(props: {
 
   return (
     <div className={styles["chat-input-actions"]}>
-      <div>
+      <div className={styles["primary-actions"]}>
         {couldStop && (
           <ChatAction
             onClick={stopAll}
@@ -788,45 +1301,18 @@ export function ChatActions(props: {
             icon={<SettingsIcon />}
           />
         )}
-
-        {showUploadImage && (
-          <ChatAction
-            onClick={props.uploadImage}
-            text={Locale.Chat.InputActions.UploadImage}
-            icon={props.uploading ? <LoadingButtonIcon /> : <ImageIcon />}
-          />
-        )}
-        {!isMobileScreen && (
-          <ChatAction
-            onClick={nextTheme}
-            text={Locale.Chat.InputActions.Theme[theme]}
-            icon={
-              <>
-                {theme === Theme.Auto ? (
-                  <AutoIcon />
-                ) : theme === Theme.Light ? (
-                  <LightIcon />
-                ) : theme === Theme.Dark ? (
-                  <DarkIcon />
-                ) : null}
-              </>
-            }
-          />
-        )}
-
+        {/* 统一的上传按钮，使用回形针图标 */}
         <ChatAction
-          onClick={props.showPromptHints}
-          text={Locale.Chat.InputActions.Prompt}
-          icon={<PromptIcon />}
+          onClick={handleFileUpload}
+          text={Locale.Chat.InputActions.UploadFile.Title(canUploadImage)}
+          icon={props.uploading ? <LoadingButtonIcon /> : <AttachmentIcon />}
         />
 
         {!isMobileScreen && (
           <ChatAction
-            onClick={() => {
-              navigate(Path.Masks);
-            }}
-            text={Locale.Chat.InputActions.Masks}
-            icon={<MaskIcon />}
+            onClick={props.showPromptHints}
+            text={Locale.Chat.InputActions.Prompt}
+            icon={<PromptIcon />}
           />
         )}
 
@@ -835,20 +1321,47 @@ export function ChatActions(props: {
           icon={<BreakIcon />}
           onClick={() => {
             chatStore.updateTargetSession(session, (session) => {
-              if (session.clearContextIndex === session.messages.length) {
-                session.clearContextIndex = undefined;
-              } else {
-                session.clearContextIndex = session.messages.length;
-                session.memoryPrompt = ""; // will clear memory
+              // 找到最后一条消息
+              const lastMessage = session.messages[session.messages.length - 1];
+              if (lastMessage) {
+                if (lastMessage?.beClear) {
+                  session.clearContextIndex = undefined;
+                  lastMessage.beClear = false;
+                } else {
+                  session.clearContextIndex = session.messages.length;
+                  lastMessage.beClear = true;
+                  session.memoryPrompt = ""; // 清除记忆提示
+                }
               }
             });
           }}
         />
-
+        <ChatAction
+          text={Locale.Chat.InputActions.Continue.Title}
+          icon={<ContinueIcon />}
+          onClick={handleContinueChat}
+        />
+        <ChatAction
+          text={
+            !session?.inPrivateMode
+              ? Locale.Chat.InputActions.PrivateMode.On
+              : Locale.Chat.InputActions.PrivateMode.Off
+          }
+          alwaysShowText={session?.inPrivateMode}
+          icon={<PrivacyModeIcon />}
+          onClick={() => {
+            if (!session?.inPrivateMode) {
+              chatStore.newSession(undefined, true);
+              showToast(Locale.Chat.InputActions.PrivateMode.OnToast);
+            } else {
+              chatStore.deleteSession(chatStore.currentSessionIndex);
+            }
+          }}
+        />
         <ChatAction
           onClick={() => setShowModelSelector(true)}
           alwaysShowText={true}
-          text={currentModel}
+          text={currentModelInfo?.displayName || currentModel}
           icon={<RobotIcon />}
         />
 
@@ -857,7 +1370,9 @@ export function ChatActions(props: {
             defaultSelectedValue={`${currentModel}@${currentProviderName}`}
             items={models.map((m) => ({
               title:
-                m?.provider?.providerName?.toLowerCase() === "openai"
+                m?.provider?.providerName?.toLowerCase() === "openai" ||
+                m?.provider?.providerType === "custom-provider" ||
+                m?.provider?.providerName === m.name
                   ? `${m.displayName}`
                   : `${m.displayName} (${m?.provider?.providerName})`,
               subTitle: m.description,
@@ -873,12 +1388,24 @@ export function ChatActions(props: {
                   providerName as ServiceProvider;
                 session.mask.syncGlobalConfig = false;
               });
+              saveModelConfig("chatModel", `${model}@${providerName}`);
               showToast(model);
             }}
           />
         )}
+        {isMobileScreen && !showMobileActions && (
+          <ChatAction
+            onClick={toggleMobileActions}
+            text={Locale.Chat.InputActions.Expand}
+            icon={<ExpandIcon />}
+          />
+        )}
       </div>
-      <div>
+      <div
+        className={`${styles["secondary-actions"]} ${
+          isMobileScreen && !showMobileActions ? styles["mobile-collapsed"] : ""
+        }`}
+      >
         {!isMobileScreen && (
           <ChatAction
             onClick={() => props.setShowShortcutKeyModal(true)}
@@ -902,17 +1429,108 @@ export function ChatActions(props: {
           text={Locale.Chat.InputActions.CloudBackup}
           icon={<FileExpressIcon />}
         />
-        <ChatAction
-          onClick={handleTranslate}
-          text={
-            isTranslating
-              ? Locale.Chat.InputActions.Translate.isTranslatingToast
-              : Locale.Chat.InputActions.Translate.Title
-          }
-          alwaysShowText={isTranslating}
-          icon={<TranslateIcon />}
-        />
-        {!isMobileScreen && (
+        <div
+          ref={toolsRef}
+          className={clsx(styles["desktop-only"], styles["tool-wrapper"])}
+        >
+          <ChatAction
+            onClick={() => setShowTools((v) => !v)}
+            text={Locale.Chat.InputActions.Tools}
+            icon={<ToolboxIcon />}
+            alwaysShowText={true}
+          />
+          {showReplaceModal && (
+            <ReplaceTextModal
+              onClose={() => setShowReplaceModal(false)}
+              onReplace={handleReplaceOperation}
+            />
+          )}
+          {showTools && (
+            <div className={styles["tools-menu"]}>
+              <ChatAction
+                onClick={handleTranslate}
+                text={
+                  originalTextForTranslate !== null
+                    ? Locale.Chat.InputActions.Translate.Undo
+                    : isTranslating
+                    ? Locale.Chat.InputActions.Translate.isTranslatingToast
+                    : Locale.Chat.InputActions.Translate.Title
+                }
+                alwaysShowText={true} //{isTranslating || originalTextForTranslate !== null}
+                icon={<TranslateIcon />}
+              />
+              <ChatAction
+                onClick={handleOCR}
+                text={
+                  isOCRing
+                    ? Locale.Chat.InputActions.OCR.isDetectingToast
+                    : Locale.Chat.InputActions.OCR.Title
+                }
+                alwaysShowText={true} //{isOCRing}
+                icon={<OcrIcon />}
+              />
+              <ChatAction
+                onClick={handleImprovePrompt}
+                text={
+                  originalPromptForImproving !== null
+                    ? Locale.Chat.InputActions.ImprovePrompt.Undo
+                    : isImprovingPrompt
+                    ? Locale.Chat.InputActions.ImprovePrompt.isImprovingToast
+                    : Locale.Chat.InputActions.ImprovePrompt.Title
+                }
+                alwaysShowText={true} // { isImprovingPrompt || originalPromptForImproving !== null }
+                icon={<ImprovePromptIcon />}
+              />
+              <ChatAction
+                onClick={handlePrivacy}
+                text={
+                  originalTextForPrivacy !== null
+                    ? Locale.Chat.InputActions.Privacy.Undo
+                    : isPrivacying
+                    ? Locale.Chat.InputActions.Privacy.isPrivacyToast
+                    : Locale.Chat.InputActions.Privacy.Title
+                }
+                alwaysShowText={true} //{isPrivacying || originalTextForPrivacy !== null}
+                icon={<PrivacyIcon />}
+              />
+              <ChatAction
+                onClick={handleClearInput}
+                text={
+                  originalTextForClear !== null
+                    ? Locale.Chat.InputActions.ClearInput.Undo
+                    : Locale.Chat.InputActions.ClearInput.Title
+                }
+                alwaysShowText={true}
+                icon={<EraserIcon />}
+              />
+              <ChatAction
+                onClick={handleReplaceText}
+                text={
+                  originalTextForReplace !== null
+                    ? Locale.Chat.InputActions.ReplaceText.Undo
+                    : isReplacing
+                    ? Locale.Chat.InputActions.ReplaceText.isReplacingToast
+                    : Locale.Chat.InputActions.ReplaceText.Title
+                }
+                alwaysShowText={true}
+                icon={<EditIcon />}
+              />
+            </div>
+          )}
+        </div>
+        <div className={styles["mobile-only"]}>
+          <ChatAction
+            onClick={handleTranslate}
+            text={
+              originalTextForTranslate !== null
+                ? Locale.Chat.InputActions.Translate.Undo
+                : isTranslating
+                ? Locale.Chat.InputActions.Translate.isTranslatingToast
+                : Locale.Chat.InputActions.Translate.Title
+            }
+            alwaysShowText={isTranslating || originalTextForTranslate !== null}
+            icon={<TranslateIcon />}
+          />
           <ChatAction
             onClick={handleOCR}
             text={
@@ -923,17 +1541,41 @@ export function ChatActions(props: {
             alwaysShowText={isOCRing}
             icon={<OcrIcon />}
           />
+          <ChatAction
+            onClick={handleImprovePrompt}
+            text={
+              originalPromptForImproving !== null
+                ? Locale.Chat.InputActions.ImprovePrompt.Undo
+                : isImprovingPrompt
+                ? Locale.Chat.InputActions.ImprovePrompt.isImprovingToast
+                : Locale.Chat.InputActions.ImprovePrompt.Title
+            }
+            alwaysShowText={
+              isImprovingPrompt || originalPromptForImproving !== null
+            }
+            icon={<ImprovePromptIcon />}
+          />
+          <ChatAction
+            onClick={handlePrivacy}
+            text={
+              originalTextForPrivacy !== null
+                ? Locale.Chat.InputActions.Privacy.Undo
+                : isPrivacying
+                ? Locale.Chat.InputActions.Privacy.isPrivacyToast
+                : Locale.Chat.InputActions.Privacy.Title
+            }
+            alwaysShowText={isPrivacying || originalTextForPrivacy !== null}
+            icon={<PrivacyIcon />}
+          />
+        </div>
+        {isMobileScreen && showMobileActions && (
+          <ChatAction
+            onClick={toggleMobileActions}
+            alwaysShowText={true}
+            text={Locale.Chat.InputActions.Collapse}
+            icon={<CollapseIcon />}
+          />
         )}
-        <ChatAction
-          onClick={handlePrivacy}
-          text={
-            isPrivacying
-              ? Locale.Chat.InputActions.Privacy.isPrivacyToast
-              : Locale.Chat.InputActions.Privacy.Title
-          }
-          alwaysShowText={isPrivacying}
-          icon={<PrivacyIcon />}
-        />
       </div>
     </div>
   );
@@ -1036,6 +1678,14 @@ export function ShortcutKeyModal(props: { onClose: () => void }) {
       keys: isMac ? ["⌘", "/"] : ["Ctrl", "/"],
     },
     {
+      title: Locale.Chat.ShortcutKey.moveCursorToStart,
+      keys: isMac ? ["⌘", "Shift", "Left"] : ["Ctrl", "Shift", "Left"],
+    },
+    {
+      title: Locale.Chat.ShortcutKey.moveCursorToEnd,
+      keys: isMac ? ["⌘", "Shift", "Right"] : ["Ctrl", "Shift", "Right"],
+    },
+    {
       title: Locale.Chat.ShortcutKey.searchChat,
       keys: isMac ? ["⌘", "Alt", "F"] : ["Ctrl", "Alt", "F"],
     },
@@ -1085,6 +1735,7 @@ function ChatInputActions(props: {
   onUserStop: (messageId: string) => void;
   onResend: (message: any) => void;
   onDelete: (msgId: string) => void;
+  onBreak: (msgId: string) => void;
   onPinMessage: (message: any) => void;
   copyToClipboard: (text: string) => void;
   openaiSpeech: (text: string) => void;
@@ -1098,6 +1749,7 @@ function ChatInputActions(props: {
     onUserStop,
     onResend,
     onDelete,
+    onBreak,
     onPinMessage,
     copyToClipboard,
     openaiSpeech,
@@ -1108,7 +1760,7 @@ function ChatInputActions(props: {
   } = props;
 
   return (
-    <div className={styles["chat-input-actions"]}>
+    <div className={styles["message-actions-row"]}>
       {message.streaming ? (
         <ChatAction
           text={Locale.Chat.Actions.Stop}
@@ -1129,11 +1781,11 @@ function ChatInputActions(props: {
             onClick={() => onDelete(message.id ?? i)}
           />
 
-          <ChatAction
+          {/* <ChatAction
             text={Locale.Chat.Actions.Pin}
             icon={<PinIcon />}
             onClick={() => onPinMessage(message)}
-          />
+          /> */}
           <ChatAction
             text={Locale.Chat.Actions.Copy}
             icon={<CopyIcon />}
@@ -1155,18 +1807,23 @@ function ChatInputActions(props: {
             icon={<EditToInputIcon />}
             onClick={() => setUserInput(getMessageTextContent(message))}
           />
+          <ChatAction
+            text={Locale.Chat.InputActions.Clear}
+            icon={<BreakIcon />}
+            onClick={() => onBreak(message.id ?? i)}
+          />
         </>
       )}
     </div>
   );
 }
-function _Chat() {
+function ChatComponent({ modelTable }: { modelTable: Model[] }) {
   type RenderMessage = ChatMessage & { preview?: boolean };
 
   const chatStore = useChatStore();
   const session = chatStore.currentSession();
   const config = useAppConfig();
-  const fontSize = config.fontSize;
+  // const fontSize = config.fontSize;
 
   const [showExport, setShowExport] = useState(false);
 
@@ -1205,7 +1862,16 @@ function _Chat() {
   const isMobileScreen = useMobileScreen();
   const navigate = useNavigate();
   const [attachImages, setAttachImages] = useState<string[]>([]);
+  const [attachFiles, setAttachFiles] = useState<UploadFile[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [renameAttachFile, setRenameAttachFile] = useState<{
+    index: number;
+    name: string;
+  } | null>(null);
+
+  const [showModelAtSelector, setShowModelAtSelector] = useState(false); // 是否显示@
+  const [modelAtQuery, setModelAtQuery] = useState(""); // 模型选择器的搜索字符
+  const [modelAtSelectIndex, setModelAtSelectIndex] = useState(0); // 当前选中模型的索引
 
   // prompt hints
   const promptStore = usePromptStore();
@@ -1219,15 +1885,41 @@ function _Chat() {
     { leading: true, trailing: true },
   );
 
+  // expansive rules
+  const [lastExpansion, setLastExpansion] = useState<{
+    originalText: string;
+    replacedText: string;
+    triggerLength: number;
+  } | null>(null);
+  const processVariables = (text: string) => {
+    const now = new Date();
+    return text.replace(/{{(\w+)}}/g, (match, variable) => {
+      switch (variable) {
+        case "datetime":
+          return now.toLocaleString();
+        case "time":
+          return now.toLocaleTimeString();
+        case "date":
+          return now.toLocaleDateString();
+        default:
+          return match;
+      }
+    });
+  };
+
   // auto grow input
-  const [inputRows, setInputRows] = useState(2);
+  const minInputRows = 3;
+  const [inputRows, setInputRows] = useState(minInputRows);
+  const [isExpanded, setIsExpanded] = useState(false);
   const measure = useDebouncedCallback(
     () => {
       const rows = inputRef.current ? autoGrowTextArea(inputRef.current) : 1;
-      const inputRows = Math.min(
-        20,
-        Math.max(2 + Number(!isMobileScreen), rows),
-      );
+      const inputRows = isExpanded
+        ? 20
+        : Math.min(
+            20,
+            Math.max(minInputRows + 2 * Number(!isMobileScreen), rows),
+          );
       setInputRows(inputRows);
     },
     100,
@@ -1238,7 +1930,10 @@ function _Chat() {
   );
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(measure, [userInput]);
+  useEffect(measure, [userInput, isExpanded]);
+  const toggleExpand = () => {
+    setIsExpanded(!isExpanded);
+  };
 
   // chat commands shortcuts
   const chatCommands = useChatCommand({
@@ -1284,10 +1979,12 @@ function _Chat() {
     },
     resend: () => onResend(session.messages[session.messages.length - 1]),
     clear: () =>
-      chatStore.updateTargetSession(
-        session,
-        (session) => (session.clearContextIndex = session.messages.length),
-      ),
+      chatStore.updateTargetSession(session, (session) => {
+        session.clearContextIndex = session.messages.length;
+        if (session.clearContextIndex > 1) {
+          session.messages[session.messages.length - 1].beClear = true;
+        }
+      }),
     new: () => chatStore.newSession(),
     search: () => navigate(Path.SearchChat),
     newm: () => navigate(Path.NewChat),
@@ -1295,27 +1992,128 @@ function _Chat() {
     next: () => chatStore.nextSession(1),
     fork: () => chatStore.forkSession(),
     del: () => chatStore.deleteSession(chatStore.currentSessionIndex),
+    pin: () => chatStore.pinSession(chatStore.currentSessionIndex),
+    private: () => {
+      if (!chatStore.sessions[chatStore.currentSessionIndex]?.inPrivateMode) {
+        chatStore.newSession(session.mask, true);
+        showToast(Locale.Chat.InputActions.PrivateMode.OnToast);
+      } else {
+        chatStore.deleteSession(chatStore.currentSessionIndex);
+      }
+    },
   });
 
   // only search prompts when user input is short
   const SEARCH_TEXT_LIMIT = 30;
   const onInput = (text: string) => {
-    setUserInput(text);
-    const n = text.trim().length;
+    let shouldProcessNormally = true;
 
-    // clear search results
-    if (n === 0) {
-      setPromptHints([]);
-    } else if (text.match(ChatCommandPrefix)) {
-      setPromptHints(chatCommands.search(text));
-    } else if (!config.disablePromptHint && n < SEARCH_TEXT_LIMIT) {
-      // check if need to trigger auto completion
-      if (text.match(MaskCommandPrefix)) {
-        let searchText = text.slice(1);
-        onSearch(searchText);
+    // 只有在功能启用时才处理替换和还原逻辑
+    if (config.enableTextExpansion) {
+      // 1. 首先检查是否需要还原 - 检测到删除操作后立即还原
+      if (lastExpansion && text.length < lastExpansion.replacedText.length) {
+        // 只要检测到删除操作（文本变短），立即还原，不考虑删除到什么位置
+        setUserInput(lastExpansion.originalText);
+        setLastExpansion(null);
+        shouldProcessNormally = false;
+      }
+      // 2. 如果不需要还原，检查是否匹配替换规则
+      else {
+        const enabledRules = useExpansionRulesStore
+          .getState()
+          .getEnabledRules();
+        for (const rule of enabledRules) {
+          if (text.endsWith(rule.trigger)) {
+            const beforeTrigger = text.slice(
+              0,
+              text.length - rule.trigger.length,
+            );
+            const processedReplacement = processVariables(rule.replacement);
+            // 处理光标位置
+            const cursorPos = processedReplacement.indexOf("$|$");
+            let newText =
+              beforeTrigger + processedReplacement.replace("$|$", "");
+
+            // 记录这次替换的信息，用于可能的还原
+            setLastExpansion({
+              originalText: text,
+              replacedText: newText,
+              triggerLength: rule.trigger.length,
+            });
+
+            setUserInput(newText);
+
+            // 设置光标位置
+            if (cursorPos >= 0) {
+              setTimeout(() => {
+                if (inputRef.current) {
+                  const targetPos = beforeTrigger.length + cursorPos;
+                  inputRef.current.setSelectionRange(targetPos, targetPos);
+                  inputRef.current.focus();
+                }
+              }, 0);
+            }
+
+            shouldProcessNormally = false;
+            break;
+          }
+        }
+      }
+    }
+
+    // 3. 处理常规输入
+    if (shouldProcessNormally) {
+      // 当用户输入任何新内容并且不是删除操作时，重置上次替换记录
+      if (lastExpansion && lastExpansion.replacedText !== text) {
+        setLastExpansion(null);
+      }
+
+      setUserInput(text);
+      const n = text.trim().length;
+
+      // const atMatch = text.match(/^@([\w-]*)$/); // 完整匹配 @ 后面任意单词或短线
+      const atMatch = text.match(/^@(\S*)$/); // 完整匹配 @ 后面非空字符
+      if (!isMobileScreen && atMatch) {
+        setModelAtQuery(atMatch[1]);
+        setShowModelAtSelector(true);
+        setModelAtSelectIndex(0);
+      } else {
+        setShowModelAtSelector(false);
+      }
+
+      // clear search results
+      if (n === 0) {
+        setPromptHints([]);
+      } else if (text.match(ChatCommandPrefix)) {
+        const searchResults = chatCommands.search(text);
+        setPromptHints(searchResults);
+        // 如果搜索结果为空，确保清除候选列表
+        if (searchResults.length === 0) {
+          setPromptHints([]);
+        }
+      } else if (!config.disablePromptHint && n < SEARCH_TEXT_LIMIT) {
+        // check if need to trigger auto completion
+        if (text.match(MaskCommandPrefix)) {
+          let searchText = text.slice(1);
+          onSearch(searchText);
+        } else {
+          // 如果不匹配任何前缀，也清除候选列表
+          setPromptHints([]);
+        }
+      } else {
+        setPromptHints([]);
       }
     }
   };
+
+  useEffect(() => {
+    if (selectedRef.current) {
+      selectedRef.current.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [modelAtSelectIndex, modelAtQuery, showModelAtSelector]);
 
   const doSubmit = (userInput: string) => {
     if (userInput.trim() === "" && isEmpty(attachImages)) return;
@@ -1327,15 +2125,23 @@ function _Chat() {
       return;
     }
     setIsLoading(true);
-    chatStore
-      .onUserInput(userInput, attachImages)
-      .then(() => setIsLoading(false));
-    setAttachImages([]);
+    if (canUploadImage) {
+      chatStore
+        .onUserInput(userInput, attachImages, attachFiles)
+        .then(() => setIsLoading(false));
+      setAttachImages([]);
+    } else {
+      chatStore
+        .onUserInput(userInput, [], attachFiles)
+        .then(() => setIsLoading(false));
+    }
+    setAttachFiles([]);
     chatStore.setLastInput(userInput);
     setUserInput("");
     setPromptHints([]);
     if (!isMobileScreen) inputRef.current?.focus();
     setAutoScroll(true);
+    setLastExpansion(null);
   };
 
   const onPromptSelect = (prompt: RenderPompt) => {
@@ -1389,8 +2195,107 @@ function _Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
+  const formatModelItem = (model: Model) => ({
+    title:
+      model?.provider?.providerName?.toLowerCase() === "openai" ||
+      model?.provider?.providerType === "custom" ||
+      model?.provider?.providerType === "custom-provider" ||
+      model?.provider?.providerName === model.name
+        ? `${model.displayName || model.name}`
+        : `${model.displayName || model.name} (${model?.provider
+            ?.providerName})`,
+    subTitle: model.description,
+    value: `${model.name}@${model?.provider?.providerName}`,
+    model: model, // 保存原始模型对象，方便后续使用
+  });
+  // 修改过滤逻辑
+  const getFilteredModels = () => {
+    const query = modelAtQuery.toLowerCase();
+    return modelTable
+      .filter((model) => {
+        // 使用与 SearchSelector 相同的过滤逻辑
+        const formattedItem = formatModelItem(model);
+        return (
+          formattedItem.title.toLowerCase().includes(query) ||
+          (formattedItem.subTitle &&
+            formattedItem.subTitle.toLowerCase().includes(query)) ||
+          model.name.toLowerCase().includes(query) ||
+          (model.provider?.providerName &&
+            model.provider.providerName.toLowerCase().includes(query))
+        );
+      })
+      .map(formatModelItem);
+  };
+  const selectedRef = useRef<HTMLDivElement>(null); //引用当前所选项
   // check if should send message
   const onInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showModelAtSelector) {
+      const filteredModels = getFilteredModels();
+
+      const changeIndex = (delta: number) => {
+        e.preventDefault();
+        setModelAtSelectIndex((prev) => {
+          const newIndex = Math.max(
+            0,
+            Math.min(prev + delta, filteredModels.length - 1),
+          );
+          return newIndex;
+        });
+      };
+
+      if (e.key === "ArrowUp") {
+        changeIndex(-1);
+      } else if (e.key === "ArrowDown") {
+        changeIndex(1);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const selectedItem = filteredModels[modelAtSelectIndex];
+        if (selectedItem) {
+          // 解析 value 字符串，获取模型名称和提供商
+          const [modelName, providerName] =
+            selectedItem.value.split(/@(?=[^@]*$)/);
+
+          chatStore.updateTargetSession(session, (session) => {
+            session.mask.modelConfig.model = modelName as ModelType;
+            session.mask.modelConfig.providerName =
+              providerName as ServiceProvider;
+            session.mask.syncGlobalConfig = false;
+          });
+          saveModelConfig("chatModel", selectedItem.value);
+          setUserInput("");
+          setShowModelAtSelector(false);
+          showToast(modelName);
+        }
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setShowModelAtSelector(false);
+      }
+      return;
+    }
+    if (e.ctrlKey && e.shiftKey) {
+      const textarea = inputRef.current;
+      if (!textarea) return;
+
+      if (e.key === "ArrowLeft") {
+        // Ctrl+Shift+左箭头：跳转到段首
+        e.preventDefault();
+        textarea.setSelectionRange(0, 0);
+        textarea.focus();
+        textarea.scrollTop = 0;
+        showToast(Locale.Chat.InputActions.MoveCursorToStart);
+      } else if (e.key === "ArrowRight") {
+        // Ctrl+Shift+右箭头：跳转到段尾
+        e.preventDefault();
+        textarea.setSelectionRange(
+          textarea.value.length,
+          textarea.value.length,
+        );
+        textarea.focus();
+        textarea.scrollTop = textarea.scrollHeight;
+        showToast(Locale.Chat.InputActions.MoveCursorToEnd);
+      }
+      return;
+    }
     // if ArrowUp and no userInput, fill with last input
     if (
       e.key === "ArrowUp" &&
@@ -1427,6 +2332,15 @@ function _Chat() {
 
   const onDelete = (msgId: string) => {
     deleteMessage(msgId);
+  };
+
+  const onBreak = (msgId: string) => {
+    chatStore.updateTargetSession(session, (session) => {
+      const msg = session.messages.find((m) => m.id === msgId);
+      if (msg) {
+        msg.beClear = true;
+      }
+    });
   };
 
   const onResend = (message: ChatMessage) => {
@@ -1473,6 +2387,22 @@ function _Chat() {
       return;
     }
 
+    // 提取用户消息中的文件附件
+    const userAttachFiles: UploadFile[] = [];
+    if (Array.isArray(userMessage.content)) {
+      userMessage.content.forEach((item) => {
+        if (item.type === "file_url" && item.file_url) {
+          userAttachFiles.push({
+            name: item.file_url.name,
+            url: item.file_url.url,
+            contentType: item.file_url.contentType,
+            size: item.file_url.size,
+            tokenCount: item.file_url.tokenCount,
+          });
+        }
+      });
+    }
+
     // delete the original messages
     deleteMessage(userMessage.id);
     deleteMessage(botMessage?.id);
@@ -1481,7 +2411,10 @@ function _Chat() {
     setIsLoading(true);
     const textContent = getMessageTextContent(userMessage);
     const images = getMessageImages(userMessage);
-    chatStore.onUserInput(textContent, images).then(() => setIsLoading(false));
+    // 将图片和文件附件传递给 onUserInput
+    chatStore
+      .onUserInput(textContent, images, userAttachFiles)
+      .then(() => setIsLoading(false));
     inputRef.current?.focus();
   };
 
@@ -1731,48 +2664,280 @@ function _Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Extract these as shared variables in the ChatComponent function
+  const modelName = session.mask.modelConfig.model;
+  const providerName =
+    session.mask.modelConfig.providerName || ServiceProvider.OpenAI;
+  // Find the current model info from modelTable
+  const currentModelInfo = useMemo(() => {
+    return modelTable.find(
+      (m) => m.name === modelName && m.provider?.providerName === providerName,
+    );
+  }, [modelName, providerName, modelTable]);
+  // Determine if the model supports vision
+  const canUploadImage = useMemo(() => {
+    return isVisionModel(modelName) || !!currentModelInfo?.enableVision;
+  }, [modelName, currentModelInfo]);
+
   const handlePaste = useCallback(
     async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-      const currentModel = chatStore.currentSession().mask.modelConfig.model;
-      if (!isVisionModel(currentModel)) {
+      const items = (event.clipboardData || window.clipboardData).items;
+
+      // 检查是否有文本内容
+      const textContent = event.clipboardData.getData("text");
+      const tokenCount: number = countTokens(textContent);
+      if (textContent && tokenCount > minTokensForPastingAsFile) {
+        event.preventDefault(); // 阻止默认粘贴行为
+
+        // 将大量文本转换为文件对象
+        // 生成唯一的文件名以避免重复
+        const timestamp = new Date().getTime();
+        const fileName = `pasted_text_${timestamp}.txt`;
+        const file = new File([textContent], fileName, { type: "text/plain" });
+        setUploading(true);
+
+        try {
+          const data = await uploadFileRemote(file);
+          const fileData: UploadFile = {
+            name: fileName,
+            url: data.content,
+            contentType: data.type,
+            size: parseFloat((file.size / 1024).toFixed(2)),
+            tokenCount: tokenCount,
+          };
+
+          // 限制文件大小:1M
+          if (fileData?.size && fileData?.size > maxFileSizeInKB) {
+            showToast(Locale.Chat.InputActions.UploadFile.FileTooLarge);
+            setUploading(false);
+            return;
+          }
+
+          if (data.content && tokenCount > 0) {
+            const newFiles = [...attachFiles, fileData];
+            // 检查文件数量限制
+            const MAX_DOC_CNT = 6;
+            if (newFiles.length > MAX_DOC_CNT) {
+              showToast(Locale.Chat.InputActions.UploadFile.TooManyFile);
+              newFiles.splice(MAX_DOC_CNT, newFiles.length - MAX_DOC_CNT);
+            }
+            setAttachFiles(newFiles);
+            showToast(
+              Locale.Chat.InputActions.UploadFile.TooManyTokenToPasteAsFile,
+            );
+          }
+        } catch (e) {
+          console.error("Error uploading file:", e);
+          showToast(String(e));
+        } finally {
+          setUploading(false);
+        }
+
         return;
       }
-      const items = (event.clipboardData || window.clipboardData).items;
       for (const item of items) {
-        if (item.kind === "file" && item.type.startsWith("image/")) {
+        if (item.kind === "file") {
           event.preventDefault();
           const file = item.getAsFile();
-          if (file) {
-            const images: string[] = [];
-            images.push(...attachImages);
-            images.push(
-              ...(await new Promise<string[]>((res, rej) => {
-                setUploading(true);
-                const imagesData: string[] = [];
-                uploadImageRemote(file)
-                  .then((dataUrl) => {
-                    imagesData.push(dataUrl);
-                    setUploading(false);
-                    res(imagesData);
-                  })
-                  .catch((e) => {
-                    setUploading(false);
-                    rej(e);
-                  });
-              })),
-            );
-            const imagesLength = images.length;
 
-            if (imagesLength > 3) {
-              images.splice(3, imagesLength - 3);
+          if (file) {
+            // 处理图片文件
+            if (item.type.startsWith("image/")) {
+              // if (!canUploadImage) {
+              //   showToast(
+              //     Locale.Chat.InputActions.UnsupportedModelForUploadImage,
+              //   );
+              //   continue;
+              // }
+              const images: string[] = [];
+              images.push(...attachImages);
+              images.push(
+                ...(await new Promise<string[]>((res, rej) => {
+                  setUploading(true);
+                  const imagesData: string[] = [];
+                  uploadImageRemote(file)
+                    .then((dataUrl) => {
+                      imagesData.push(dataUrl);
+                      setUploading(false);
+                      res(imagesData);
+                    })
+                    .catch((e) => {
+                      setUploading(false);
+                      rej(e);
+                    });
+                })),
+              );
+              const imagesLength = images.length;
+
+              if (imagesLength > 3) {
+                images.splice(3, imagesLength - 3);
+              }
+              setAttachImages(images);
             }
-            setAttachImages(images);
+            // 处理文本文件
+            else {
+              // 检查是否是支持的文件类型
+              if (supportFileType(file.name)) {
+                setUploading(true);
+                try {
+                  const data = await uploadFileRemote(file);
+                  const tokenCount: number = countTokens(data.content);
+                  const fileData: UploadFile = {
+                    name: file.name,
+                    url: data.content,
+                    contentType: data.type,
+                    size: parseFloat((file.size / 1024).toFixed(2)),
+                    tokenCount: tokenCount,
+                  };
+
+                  // 限制文件大小:1M
+                  if (fileData?.size && fileData?.size > maxFileSizeInKB) {
+                    showToast(Locale.Chat.InputActions.UploadFile.FileTooLarge);
+                    setUploading(false);
+                    return;
+                  }
+
+                  // 检查重复文件
+                  const isDuplicate = attachFiles.some(
+                    (existingFile) =>
+                      existingFile.name === fileData.name &&
+                      existingFile.url === fileData.url,
+                  );
+
+                  if (isDuplicate) {
+                    showToast(
+                      Locale.Chat.InputActions.UploadFile.DuplicateFile(
+                        file.name,
+                      ),
+                    );
+                    setUploading(false);
+                    return;
+                  }
+
+                  if (data.content && tokenCount > 0) {
+                    const newFiles = [...attachFiles, fileData];
+                    // 检查文件数量限制
+                    const MAX_DOC_CNT = 6;
+                    if (newFiles.length > MAX_DOC_CNT) {
+                      showToast(
+                        Locale.Chat.InputActions.UploadFile.TooManyFile,
+                      );
+                      newFiles.splice(
+                        MAX_DOC_CNT,
+                        newFiles.length - MAX_DOC_CNT,
+                      );
+                    }
+                    setAttachFiles(newFiles);
+                  }
+                } catch (e) {
+                  console.error("Error uploading file:", e);
+                  showToast(String(e));
+                } finally {
+                  setUploading(false);
+                }
+              }
+            }
           }
         }
       }
     },
-    [attachImages, chatStore],
+    [attachImages, attachFiles, canUploadImage],
   );
+
+  function supportFileType(filename: string) {
+    // 获取文件扩展名
+    const fileExtension = filename.split(".").pop()?.toLowerCase();
+    return fileExtension && textFileExtensions.includes(fileExtension);
+  }
+  async function uploadDocument() {
+    const files: UploadFile[] = [...attachFiles];
+
+    // 构建accept属性的值
+    const acceptTypes = textFileExtensions.map((ext) => `.${ext}`).join(",");
+
+    files.push(
+      ...(await new Promise<UploadFile[]>((res, rej) => {
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = acceptTypes;
+        fileInput.multiple = true;
+        fileInput.onchange = (event: any) => {
+          setUploading(true);
+          const inputFiles = event.target.files;
+          const filesData: UploadFile[] = [];
+
+          (async () => {
+            for (let i = 0; i < inputFiles.length; i++) {
+              const file = inputFiles[i];
+              // 检查文件类型是否在允许列表中
+              if (!supportFileType(file.name)) {
+                setUploading(false);
+                showToast(
+                  Locale.Chat.InputActions.UploadFile.UnsupportedFileType,
+                );
+                return;
+              }
+              try {
+                const data = await uploadFileRemote(file);
+                const tokenCount: number = countTokens(data.content);
+                const fileData: UploadFile = {
+                  name: file.name,
+                  url: data.content,
+                  contentType: data.type,
+                  size: parseFloat((file.size / 1024).toFixed(2)),
+                  tokenCount: tokenCount,
+                };
+
+                // 限制文件大小
+                if (fileData?.size && fileData?.size > maxFileSizeInKB) {
+                  showToast(Locale.Chat.InputActions.UploadFile.FileTooLarge);
+                  setUploading(false);
+                } else {
+                  // 检查是否有同名且内容相同的文件
+                  const isDuplicate = files.some(
+                    (existingFile) =>
+                      existingFile.name === fileData.name &&
+                      existingFile.url === fileData.url,
+                  );
+                  if (isDuplicate) {
+                    // 如果是重复文件，显示提示但不添加到filesData
+                    showToast(
+                      Locale.Chat.InputActions.UploadFile.DuplicateFile(
+                        file.name,
+                      ),
+                    );
+                    setUploading(false);
+                  } else if (data.content && tokenCount > 0) {
+                    // 如果不是重复文件且有效，则添加到filesData
+                    filesData.push(fileData);
+                  }
+                }
+
+                if (
+                  filesData.length === MAX_DOC_CNT ||
+                  filesData.length === inputFiles.length
+                ) {
+                  setUploading(false);
+                  res(filesData);
+                }
+              } catch (e) {
+                setUploading(false);
+                rej(e);
+              }
+            }
+          })();
+        };
+        fileInput.click();
+      })),
+    );
+
+    const filesLength = files.length;
+    if (filesLength > MAX_DOC_CNT) {
+      files.splice(MAX_DOC_CNT, filesLength - MAX_DOC_CNT);
+      showToast(Locale.Chat.InputActions.UploadFile.TooManyFile);
+    }
+    setAttachFiles(files);
+  }
 
   async function uploadImage(): Promise<string[]> {
     const images: string[] = [];
@@ -1908,6 +3073,98 @@ function _Chat() {
     };
   }, [messages, chatStore, navigate]);
 
+  const handleModelNameClick = (providerId?: string) => {
+    if (providerId) {
+      // Only navigate if providerId is provided
+      navigate(`${Path.CustomProvider}/${providerId}`);
+    }
+  };
+  const formatMessage = (message: RenderMessage) => {
+    const mainInfo = `${message.date.toLocaleString()}${
+      message.model ? ` - ${message.displayName || message.model}` : ""
+    }`;
+    const { statistic } = message;
+    if (!statistic) return mainInfo;
+    const isStreaming =
+      message.isStreamRequest !== undefined
+        ? message.isStreamRequest
+        : statistic &&
+          "firstReplyLatency" in statistic &&
+          statistic.firstReplyLatency !== undefined;
+    const {
+      singlePromptTokens,
+      completionTokens,
+      firstReplyLatency,
+      totalReplyLatency,
+    } = statistic;
+
+    if (message.role === "assistant") {
+      if (isStreaming) {
+        // For streaming, check all relevant fields
+        if (
+          completionTokens === undefined ||
+          !firstReplyLatency ||
+          !totalReplyLatency
+        ) {
+          return mainInfo;
+        }
+      } else {
+        // For non-streaming, only check completionTokens and totalReplyLatency
+        if (completionTokens === undefined || !totalReplyLatency) {
+          return mainInfo;
+        }
+      }
+    } else {
+      // Other roles only need to check prompt tokens
+      if (singlePromptTokens === undefined) return mainInfo;
+    }
+
+    const tokenString =
+      message.role === "assistant"
+        ? `${completionTokens} Tokens`
+        : `${singlePromptTokens} Tokens`;
+
+    const performanceInfo =
+      message.role === "assistant"
+        ? (() => {
+            if (isStreaming) {
+              const ttft = (firstReplyLatency! / 1000).toFixed(2);
+              const latency = (totalReplyLatency! / 1000).toFixed(2);
+              const speed = (
+                (1000 * completionTokens!) /
+                (totalReplyLatency! - firstReplyLatency!)
+              ).toFixed(2);
+              return `⚡ ${speed} T/s ⏱️ FT:${ttft}s | TT:${latency}s`;
+            } else {
+              const speed = (
+                (1000 * completionTokens!) /
+                totalReplyLatency!
+              ).toFixed(2);
+              const latency = (totalReplyLatency! / 1000).toFixed(2);
+              return `⚡ ${speed} T/s ⏱️ ${latency}s (Non-stream)`;
+            }
+          })()
+        : "";
+
+    const statInfo = performanceInfo
+      ? `${tokenString} ${performanceInfo}`
+      : tokenString;
+
+    return isMobileScreen ? (
+      <>
+        {mainInfo}
+        <br />
+        {statInfo}
+      </>
+    ) : (
+      `${mainInfo} - ${statInfo}`
+    );
+  };
+
+  const enableParamOverride =
+    session.mask.modelConfig.enableParamOverride || false;
+  const paramOverrideContent =
+    session.mask.modelConfig.paramOverrideContent || "";
   return (
     <div className={styles.chat} key={session.id}>
       <div className="window-header" data-tauri-drag-region>
@@ -1931,9 +3188,9 @@ function _Chat() {
           >
             {!session.topic ? DEFAULT_TOPIC : session.topic}
           </div>
-          <div className="window-header-sub-title">
+          {/* <div className="window-header-sub-title">
             {Locale.Chat.SubTitle(session.messages.length)}
-          </div>
+          </div> */}
         </div>
         <div className="window-actions">
           <div className="window-action-button">
@@ -2004,15 +3261,21 @@ function _Chat() {
       >
         {messages.map((message, i) => {
           const isUser = message.role === "user";
+          const shouldHideUserMessage =
+            isUser && message.isContinuePrompt === true;
+          if (!config.enableShowUserContinuePrompt && shouldHideUserMessage) {
+            return null;
+          }
           const isContext = i < context.length;
           const showActions =
             i > 0 &&
             !(message.preview || message.content.length === 0) &&
             !isContext;
           const showTyping = message.preview || message.streaming;
-
-          const shouldShowClearContextDivider = i === clearContextIndex - 1;
-
+          const shouldShowClearContextDivider =
+            i === clearContextIndex - 1 || message?.beClear === true;
+          const providerIdForClick =
+            message?.providerType && message.providerType === "custom-provider";
           return (
             <Fragment key={message.id}>
               <div
@@ -2033,19 +3296,56 @@ function _Chat() {
                               getMessageTextContent(message),
                               10,
                             );
-                            let newContent: string | MultimodalContent[] =
-                              newMessage;
-                            const images = getMessageImages(message);
-                            if (images.length > 0) {
+                            // 检查原始消息是否包含多模态内容（图片或文件）
+                            const hasMultimodalContent =
+                              Array.isArray(message.content) &&
+                              message.content.some(
+                                (item) =>
+                                  item.type === "image_url" ||
+                                  item.type === "file_url",
+                              );
+
+                            let newContent: string | MultimodalContent[];
+
+                            if (hasMultimodalContent) {
+                              // 如果有多模态内容，直接创建为数组类型
                               newContent = [{ type: "text", text: newMessage }];
-                              for (let i = 0; i < images.length; i++) {
-                                newContent.push({
-                                  type: "image_url",
-                                  image_url: {
-                                    url: images[i],
-                                  },
+
+                              // 如果原始消息是数组形式，遍历并保留所有非文本内容
+                              if (Array.isArray(message.content)) {
+                                // 保留所有图片和文件
+                                message.content.forEach((item) => {
+                                  if (
+                                    item.type === "image_url" &&
+                                    item.image_url
+                                  ) {
+                                    (newContent as MultimodalContent[]).push({
+                                      type: "image_url",
+                                      image_url: {
+                                        url: item.image_url.url,
+                                      },
+                                    });
+                                  } else if (
+                                    item.type === "file_url" &&
+                                    item.file_url
+                                  ) {
+                                    console.log("edit file_url", item);
+                                    (newContent as MultimodalContent[]).push({
+                                      type: "file_url",
+                                      file_url: {
+                                        url: item.file_url.url,
+                                        name: item.file_url.name,
+                                        contentType: item.file_url.contentType,
+                                        size: item.file_url.size,
+                                        tokenCount: item.file_url.tokenCount,
+                                      },
+                                    });
+                                  }
                                 });
                               }
+                            } else {
+                              // 如果没有多模态内容，就直接使用文本
+                              newContent = newMessage;
                             }
                             chatStore.updateTargetSession(
                               session,
@@ -2071,7 +3371,9 @@ function _Chat() {
                             <MaskAvatar
                               avatar={session.mask.avatar}
                               model={
-                                message.model || session.mask.modelConfig.model
+                                message.displayName ||
+                                message.model ||
+                                session.mask.modelConfig.model
                               }
                             />
                           )}
@@ -2079,19 +3381,32 @@ function _Chat() {
                       )}
                     </div>
                     {!isUser && (
-                      <div className={styles["chat-model-name"]}>
-                        {message.model}
+                      <div
+                        className={`${styles["chat-model-name"]} ${
+                          providerIdForClick
+                            ? styles["chat-model-name--clickable"]
+                            : ""
+                        }`}
+                        onClick={
+                          providerIdForClick
+                            ? () => handleModelNameClick(message.providerId)
+                            : undefined
+                        }
+                        title={Locale.Chat.GoToCustomProviderConfig}
+                      >
+                        {message.displayName || message.model}
                       </div>
                     )}
 
                     {iconUpEnabled && showActions && (
                       <div className={styles["chat-message-actions"]}>
-                        <div className={styles["chat-input-actions"]}>
+                        <div className={styles["message-actions-row"]}>
                           <ChatInputActions
                             message={message}
                             onUserStop={onUserStop}
                             onResend={onResend}
                             onDelete={onDelete}
+                            onBreak={onBreak}
                             onPinMessage={onPinMessage}
                             copyToClipboard={copyToClipboard}
                             openaiSpeech={openaiSpeech}
@@ -2112,7 +3427,12 @@ function _Chat() {
                   <div className={styles["chat-message-item"]}>
                     <Markdown
                       key={message.streaming ? "loading" : "done"}
-                      content={getMessageTextContent(message)}
+                      status={showTyping}
+                      content={
+                        !message.streaming && isThinkingModel(message.model)
+                          ? wrapThinkingPart(getMessageTextContent(message))
+                          : getMessageTextContent(message)
+                      }
                       loading={
                         (message.preview || message.streaming) &&
                         message.content.length === 0 &&
@@ -2123,9 +3443,11 @@ function _Chat() {
                         if (!isMobileScreen) return;
                         setUserInput(getMessageTextContent(message));
                       }}
-                      fontSize={fontSize}
+                      // fontSize={fontSize}
                       parentRef={scrollRef}
                       defaultShow={i >= messages.length - 6}
+                      searchingTime={message.statistic?.searchingLatency}
+                      thinkingTime={message.statistic?.reasoningLatency}
                     />
                     {getMessageImages(message).length == 1 && (
                       <Image
@@ -2163,23 +3485,56 @@ function _Chat() {
                         })}
                       </div>
                     )}
+                    {getMessageFiles(message).length > 0 && (
+                      <div className={styles["chat-message-item-files"]}>
+                        {getMessageFiles(message).map((file, index) => {
+                          const extension: DefaultExtensionType = file.name
+                            .split(".")
+                            .pop()
+                            ?.toLowerCase() as DefaultExtensionType;
+                          const style = defaultStyles[extension];
+                          return (
+                            <a
+                              key={index}
+                              className={styles["chat-message-item-file"]}
+                            >
+                              <div
+                                className={
+                                  styles["chat-message-item-file-icon"] +
+                                  " no-dark"
+                                }
+                              >
+                                <FileIcon {...style} glyphColor="#303030" />
+                              </div>
+                              <div
+                                className={
+                                  styles["chat-message-item-file-name"]
+                                }
+                              >
+                                {file.name}{" "}
+                                {file?.size !== undefined
+                                  ? `(${file.size}K, ${file.tokenCount}Tokens)`
+                                  : `(${file.tokenCount}K)`}
+                              </div>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div className={styles["chat-message-action-date"]}>
-                    {isContext
-                      ? Locale.Chat.IsContext
-                      : `${message.date.toLocaleString()}${
-                          message.model ? ` - Model: ${message.model}` : ""
-                        }`}
+                    {isContext ? Locale.Chat.IsContext : formatMessage(message)}
                   </div>
                   {iconDownEnabled && showActions && (
                     <div className={styles["chat-message-actions"]}>
-                      <div className={styles["chat-input-actions"]}>
+                      <div className={styles["message-actions-row"]}>
                         <ChatInputActions
                           message={message}
                           onUserStop={onUserStop}
                           onResend={onResend}
                           onDelete={onDelete}
+                          onBreak={onBreak}
                           onPinMessage={onPinMessage}
                           copyToClipboard={copyToClipboard}
                           openaiSpeech={openaiSpeech}
@@ -2193,7 +3548,9 @@ function _Chat() {
                   )}
                 </div>
               </div>
-              {shouldShowClearContextDivider && <ClearContextDivider />}
+              {shouldShowClearContextDivider && (
+                <ClearContextDivider index={i} />
+              )}
             </Fragment>
           );
         })}
@@ -2202,10 +3559,73 @@ function _Chat() {
       <div className={styles["chat-input-panel"]}>
         <PromptHints prompts={promptHints} onPromptSelect={onPromptSelect} />
 
+        {showModelAtSelector && (
+          <div className={styles["model-selector"]}>
+            <div className={styles["model-selector-title"]}>
+              <span>
+                {Locale.Chat.InputActions.ModelAtSelector.SelectModel}
+              </span>
+              <span className={styles["model-selector-count"]}>
+                {Locale.Chat.InputActions.ModelAtSelector.AvailableModels(
+                  getFilteredModels().length,
+                )}
+              </span>
+            </div>
+
+            {getFilteredModels().length === 0 ? (
+              <div className={styles["model-selector-empty"]}>
+                {Locale.Chat.InputActions.ModelAtSelector.NoAvailableModels}
+              </div>
+            ) : (
+              getFilteredModels().map((item, index) => {
+                const selected = modelAtSelectIndex === index;
+                const [modelName, providerName] =
+                  item.value.split(/@(?=[^@]*$)/);
+
+                return (
+                  <div
+                    ref={selected ? selectedRef : null}
+                    key={item.value}
+                    className={`${styles["model-selector-item"]} ${
+                      selected ? styles["model-selector-item-selected"] : ""
+                    }`}
+                    onMouseEnter={() => setModelAtSelectIndex(index)}
+                    onClick={() => {
+                      chatStore.updateTargetSession(session, (session) => {
+                        session.mask.modelConfig.model = modelName as ModelType;
+                        session.mask.modelConfig.providerName =
+                          providerName as ServiceProvider;
+                        session.mask.syncGlobalConfig = false;
+                      });
+                      setUserInput("");
+                      setShowModelAtSelector(false);
+                      showToast(modelName);
+                    }}
+                  >
+                    <div className={styles["item-header"]}>
+                      <div className={styles["item-icon"]}>
+                        <Avatar model={item.title as string} />
+                      </div>
+                      <div className={styles["item-title"]}>{item.title}</div>
+                    </div>
+                    {item.subTitle && (
+                      <div className={styles["item-description"]}>
+                        {item.subTitle}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
         <ChatActions
+          uploadDocument={uploadDocument}
           uploadImage={uploadImage}
           attachImages={attachImages}
           setAttachImages={setAttachImages}
+          attachFiles={attachFiles}
+          setAttachFiles={setAttachFiles}
           setUploading={setUploading}
           showPromptModal={() => setShowPromptModal(true)}
           scrollToBottom={scrollToBottom}
@@ -2225,62 +3645,221 @@ function _Chat() {
           setShowShortcutKeyModal={setShowShortcutKeyModal}
           userInput={userInput}
           setUserInput={setUserInput}
+          modelTable={modelTable}
         />
         <label
           className={`${styles["chat-input-panel-inner"]} ${
-            attachImages.length != 0
+            attachImages.length != 0 || attachFiles.length != 0
               ? styles["chat-input-panel-inner-attach"]
+              : ""
+          } ${enableParamOverride ? styles["with-param-override"] : ""} ${
+            attachImages.length > 0 && !canUploadImage
+              ? styles["with-vision-warning"]
               : ""
           }`}
           htmlFor="chat-input"
         >
+          {attachImages.length > 0 && !canUploadImage && (
+            <div className={styles["vision-warning-header"]}>
+              <div className={styles["vision-warning-indicator"]}>
+                <div className={styles["vision-warning-icon"]}>
+                  {Locale.Settings.DocumentUploadWarning}
+                </div>
+              </div>
+            </div>
+          )}
+          {enableParamOverride && (
+            <div className={styles["param-override-header"]}>
+              <div className={styles["param-override-indicator"]}>
+                <span className={styles["param-override-icon"]}>⚙️</span>
+                <span>{Locale.Settings.ParameterOverride.EnableInfo}</span>
+              </div>
+              <div className={styles["param-override-tooltip"]}>
+                {paramOverrideContent ||
+                  Locale.Settings.ParameterOverride.EmptyParam}
+              </div>
+            </div>
+          )}
           <textarea
             id="chat-input"
             ref={inputRef}
             className={styles["chat-input"]}
-            placeholder={Locale.Chat.Input(submitKey)}
+            placeholder={Locale.Chat.Input(submitKey, isMobileScreen)}
             onInput={(e) => onInput(e.currentTarget.value)}
             value={userInput}
             onKeyDown={onInputKeyDown}
-            onFocus={scrollToBottom}
+            // onFocus={scrollToBottom}
             onClick={scrollToBottom}
             onPaste={handlePaste}
             rows={inputRows}
             autoFocus={autoFocus}
-            style={{
-              fontSize: config.fontSize,
-            }}
+            // style={{
+            //   fontSize: config.fontSize,
+            // }}
           />
-          {attachImages.length != 0 && (
-            <div className={styles["attach-images"]}>
-              {attachImages.map((image, index) => {
-                return (
-                  <div
-                    key={index}
-                    className={styles["attach-image"]}
-                    style={{ backgroundImage: `url("${image}")` }}
-                  >
-                    <div className={styles["attach-image-mask"]}>
-                      <DeleteImageButton
-                        deleteImage={() => {
-                          setAttachImages(
-                            attachImages.filter((_, i) => i !== index),
-                          );
-                        }}
-                      />
+          <div className={styles["attachments"]}>
+            {attachImages.length != 0 && (
+              <div className={styles["attach-images"]}>
+                {attachImages.map((image, index) => {
+                  return (
+                    <div
+                      key={index}
+                      className={styles["attach-image"]}
+                      style={{ backgroundImage: `url("${image}")` }}
+                    >
+                      <div className={styles["attach-image-mask"]}>
+                        <DeleteImageButton
+                          deleteImage={() => {
+                            setAttachImages(
+                              attachImages.filter((_, i) => i !== index),
+                            );
+                          }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            )}
+            {attachFiles.length != 0 && (
+              <div className={styles["attach-files"]}>
+                {attachFiles.map((file, index) => {
+                  const extension: DefaultExtensionType = file.name
+                    .split(".")
+                    .pop()
+                    ?.toLowerCase() as DefaultExtensionType;
+                  const style = defaultStyles[extension];
+                  const getFileNameClassName = (attachImagesLength: number) => {
+                    if (attachImagesLength <= 1)
+                      return styles["attach-file-name-full"];
+                    if (attachImagesLength === 2)
+                      return styles["attach-file-name-half"];
+                    if (attachImagesLength === 3)
+                      return styles["attach-file-name-less"];
+                    if (attachImagesLength === 4)
+                      return styles["attach-file-name-min"];
+                    return styles["attach-file-name-tiny"]; // 5个或更多
+                  };
+                  return (
+                    <div key={index} className={styles["attach-file"]}>
+                      <div
+                        className={styles["attach-file-icon"] + " no-dark"}
+                        key={extension}
+                      >
+                        <FileIcon {...style} glyphColor="#303030" />
+                      </div>
+                      {renameAttachFile && renameAttachFile.index === index ? (
+                        <input
+                          type="text"
+                          className={getFileNameClassName(attachImages.length)}
+                          value={renameAttachFile.name}
+                          onChange={(e) =>
+                            setRenameAttachFile({
+                              ...renameAttachFile,
+                              name: e.target.value,
+                            })
+                          }
+                          onBlur={() => {
+                            if (renameAttachFile.name.trim()) {
+                              // 保留原始扩展名
+                              const originalExt = file.name.split(".").pop();
+                              const newName = renameAttachFile.name.includes(
+                                ".",
+                              )
+                                ? renameAttachFile.name
+                                : `${renameAttachFile.name}.${originalExt}`;
+
+                              const newFiles = [...attachFiles];
+                              newFiles[index] = { ...file, name: newName };
+                              setAttachFiles(newFiles);
+                            }
+                            setRenameAttachFile(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              e.currentTarget.blur();
+                            }
+                            if (e.key === "Escape") {
+                              setRenameAttachFile(null);
+                            }
+                          }}
+                          autoFocus
+                        />
+                      ) : (
+                        <div
+                          className={getFileNameClassName(attachImages.length)}
+                          onDoubleClick={() => {
+                            setRenameAttachFile({
+                              index,
+                              name: file.name.split(".")[0], // 默认选中文件名部分，不包括扩展名
+                            });
+                          }}
+                        >
+                          {file.name} ({file.size}K, {file.tokenCount}Tokens)
+                        </div>
+                      )}
+                      <div className={styles["attach-image-mask"]}>
+                        <div style={{ display: "flex", gap: "4px" }}>
+                          <IconButton
+                            icon={<RenameIcon />}
+                            onClick={() => {
+                              setRenameAttachFile({
+                                index,
+                                name: file.name.split(".")[0], // 默认选中文件名部分，不包括扩展名
+                              });
+                            }}
+                            title={Locale.Chat.InputActions.RenameFile}
+                            style={{
+                              width: "18px",
+                              height: "18px",
+                              borderRadius: "4px",
+                              marginRight: "4px",
+                              border: "1px solid #e0e0e0",
+                              backgroundColor: "#f9f9f9",
+                            }}
+                          />
+                          <DeleteImageButton
+                            deleteImage={() => {
+                              setAttachFiles(
+                                attachFiles.filter((_, i) => i !== index),
+                              );
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className={styles["chat-input-textarea"]}>
+            <div className={styles["token-counter"]}>
+              (
+              {estimateTokenLengthInLLM(userInput) +
+                (attachFiles?.reduce(
+                  (total, file) => total + (file.tokenCount || 0),
+                  0,
+                ) || 0)}
+              )
             </div>
-          )}
-          <IconButton
-            icon={<SendWhiteIcon />}
-            text={Locale.Chat.Send}
-            className={styles["chat-input-send"]}
-            type="primary"
-            onClick={() => doSubmit(userInput)}
-          />
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <IconButton
+                icon={isExpanded ? <MinIcon /> : <MaxIcon />}
+                bordered
+                title={Locale.Chat.Actions.FullScreen}
+                aria={Locale.Chat.Actions.FullScreen}
+                onClick={toggleExpand}
+              />
+              <IconButton
+                icon={<SendWhiteIcon />}
+                text={isMobileScreen ? "" : Locale.Chat.Send}
+                type="primary"
+                onClick={() => doSubmit(userInput)}
+              />
+            </div>
+          </div>
         </label>
       </div>
 
@@ -2306,5 +3885,128 @@ function _Chat() {
 export function Chat() {
   const chatStore = useChatStore();
   const session = chatStore.currentSession();
-  return <_Chat key={session.id}></_Chat>;
+  const allModels = useAllModelsWithCustomProviders();
+  const access = useAccessStore();
+
+  const modelTable = useMemo(() => {
+    const filteredModels = allModels.filter((m) => m.available);
+    const modelMap = new Map<string, (typeof allModels)[0]>();
+
+    filteredModels.forEach((model) => {
+      const key = `${model.name}@${model?.provider?.id}`;
+
+      if (modelMap.has(key)) {
+        // 合并已存在的模型
+        const existingModel = modelMap.get(key)!;
+
+        // 合并 description（如果新模型有 description 而旧模型没有）
+        if (model.description && !existingModel.description) {
+          existingModel.description = model.description;
+        }
+        if (model.displayName && !existingModel.displayName) {
+          existingModel.displayName = model.displayName;
+        }
+        if (model.isDefault) {
+          existingModel.isDefault = true;
+        }
+      } else {
+        // 添加新模型
+        modelMap.set(key, { ...model });
+      }
+    });
+
+    // 转换为数组
+    const mergedModels = Array.from(modelMap.values());
+
+    // 确保默认模型排在第一位
+    const defaultModel = mergedModels.find((m) => m.isDefault);
+
+    if (defaultModel) {
+      return [defaultModel, ...mergedModels.filter((m) => m !== defaultModel)];
+    }
+    console.log("recalculate modelTable... ");
+    return mergedModels;
+  }, [allModels]);
+
+  // Update session messages based on modelTable
+  useEffect(() => {
+    // 仅在 session 最后一条消息 id 变化时执行，即有新的消息进入队列
+    for (let i = 0; i < session.messages.length; i++) {
+      const message = session.messages[i];
+      if (
+        message.role !== "user" &&
+        (!message.displayName ||
+          !message.providerId ||
+          !message.providerType) &&
+        message.model
+      ) {
+        const matchedModel = modelTable.find(
+          (model) =>
+            model.name === message.model &&
+            model.provider?.providerName === message.providerName,
+        );
+
+        if (matchedModel) {
+          message.displayName = matchedModel.displayName;
+          message.providerId = matchedModel.provider?.id;
+          message.providerType = matchedModel.provider?.providerType;
+        }
+      }
+    }
+  }, [session.messages[session.messages.length - 1]?.id]);
+
+  // update session model
+  useEffect(() => {
+    if (!modelTable || modelTable.length === 0) return;
+    console.log("modelTable changed, updating session model...");
+
+    const modelConfig = { ...session.mask.modelConfig };
+
+    if (!modelConfig.textProcessModel) {
+      if (access.textProcessModel) {
+        let textProcessModel, providerNameStr;
+        [textProcessModel, providerNameStr] =
+          access.textProcessModel.split("/@(?=[^@]*$)/");
+        modelConfig.textProcessModel = textProcessModel;
+        modelConfig.textProcessProviderName =
+          providerNameStr as ServiceProvider;
+      } else {
+        modelConfig.textProcessModel = modelTable[0].name;
+        modelConfig.textProcessProviderName = modelTable[0].provider
+          ?.providerName as ServiceProvider;
+      }
+    }
+    if (!modelConfig.ocrModel) {
+      if (access.ocrModel) {
+        let ocrModel, providerNameStr;
+        [ocrModel, providerNameStr] = access.ocrModel.split("/@(?=[^@]*$)/");
+        modelConfig.ocrModel = ocrModel;
+        modelConfig.ocrProviderName = providerNameStr as ServiceProvider;
+      } else {
+        modelConfig.ocrModel = modelTable[0].name;
+        modelConfig.ocrProviderName = modelTable[0].provider
+          ?.providerName as ServiceProvider;
+      }
+    }
+    if (!modelConfig.compressModel) {
+      if (access.compressModel) {
+        let compressModel, providerNameStr;
+        [compressModel, providerNameStr] =
+          access.compressModel.split("/@(?=[^@]*$)/");
+        modelConfig.compressModel = compressModel;
+        modelConfig.compressProviderName = providerNameStr as ServiceProvider;
+      } else {
+        modelConfig.compressModel = modelTable[0].name;
+        modelConfig.compressProviderName = modelTable[0].provider
+          ?.providerName as ServiceProvider;
+      }
+    }
+    chatStore.updateTargetSession(
+      session,
+      (session) => (session.mask.modelConfig = modelConfig),
+    );
+  }, [modelTable]);
+  return (
+    <ChatComponent key={session.id} modelTable={modelTable}></ChatComponent>
+  );
 }

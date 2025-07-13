@@ -5,17 +5,22 @@ import styles from "./home.module.scss";
 import { IconButton } from "./button";
 import SettingsIcon from "../icons/settings.svg";
 import GithubIcon from "../icons/github.svg";
-import ChatGptIcon from "../icons/chatgpt.svg";
+// import ChatGptIcon from "../icons/chatgpt.svg";
+import AILogoIcon from "../icons/ai-logo.svg";
 import AddIcon from "../icons/add.svg";
 import DeleteIcon from "../icons/delete.svg";
 import MaskIcon from "../icons/mask.svg";
 import DragIcon from "../icons/drag.svg";
 import DiscoveryIcon from "../icons/discovery.svg";
+import CustomProviderIcon from "../icons/custom-models.svg";
+import HomeIcon from "../icons/home.svg";
+
 import parse from "html-react-parser";
 
 import Locale from "../locales";
 
 import { useAppConfig, useChatStore, useAccessStore } from "../store";
+import { useLocation } from "react-router-dom";
 
 import {
   DEFAULT_SIDEBAR_WIDTH,
@@ -134,13 +139,30 @@ export function SideBarContainer(props: {
   onDragStart: (e: MouseEvent) => void;
   shouldNarrow: boolean;
   className?: string;
+  inPrivateMode?: boolean;
 }) {
   const isMobileScreen = useMobileScreen();
   const isIOSMobile = useMemo(
     () => isIOS() && isMobileScreen,
     [isMobileScreen],
   );
-  const { children, className, onDragStart, shouldNarrow } = props;
+  const { children, className, onDragStart, shouldNarrow, inPrivateMode } =
+    props;
+  const [showTooltip, setShowTooltip] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isMobileScreen && inPrivateMode) {
+      setShowTooltip(true);
+    }
+  }, [isMobileScreen, inPrivateMode]);
+
+  const handleTooltipClick = () => {
+    if (isMobileScreen) {
+      navigate(Path.Chat);
+    }
+  };
+
   return (
     <div
       className={`${styles.sidebar} ${className} ${
@@ -151,13 +173,36 @@ export function SideBarContainer(props: {
         transition: isMobileScreen && isIOSMobile ? "none" : undefined,
       }}
     >
-      {children}
+      {inPrivateMode && (
+        <div
+          className={styles["sidebar-mask"]}
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+        >
+          {showTooltip && (
+            <div
+              className={styles["sidebar-tooltip"]}
+              onClick={handleTooltipClick}
+              style={isMobileScreen ? { cursor: "pointer" } : undefined}
+            >
+              <div className={styles["tooltip-content"]}>
+                {Locale.Chat.InputActions.PrivateMode.Info}
+                {isMobileScreen && (
+                  <div>{Locale.Chat.InputActions.PrivateMode.Return}</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div
         className={styles["sidebar-drag"]}
         onPointerDown={(e) => onDragStart(e as any)}
       >
         <DragIcon />
       </div>
+      {children}
     </div>
   );
 }
@@ -233,17 +278,25 @@ export function SideBar(props: { className?: string }) {
   const config = useAppConfig();
   const chatStore = useChatStore();
   const { sidebarTitle, sidebarSubTitle } = useAccessStore();
+  const inPrivateMode = useChatStore((state) => {
+    const currentSession = state.sessions[state.currentSessionIndex];
+    return !!currentSession?.inPrivateMode;
+  });
+  const location = useLocation();
+  const isSettingsRoute = location.pathname === Path.Settings;
+  const isCustomProviderRoute = location.pathname === Path.CustomProvider;
 
   return (
     <SideBarContainer
       onDragStart={onDragStart}
       shouldNarrow={shouldNarrow}
+      inPrivateMode={inPrivateMode}
       {...props}
     >
       <SideBarHeader
         title={sidebarTitle}
         subTitle={sidebarSubTitle}
-        logo={<ChatGptIcon />}
+        logo={<AILogoIcon />}
         shouldNarrow={shouldNarrow}
       >
         <div className={styles["sidebar-header-bar"]}>
@@ -313,10 +366,14 @@ export function SideBar(props: { className?: string }) {
               />
             </div>
             <div className={styles["sidebar-action"]}>
-              <Link to={Path.Settings}>
+              <Link to={isSettingsRoute ? Path.Home : Path.Settings}>
                 <IconButton
-                  aria={Locale.Settings.Title}
-                  icon={<SettingsIcon />}
+                  aria={
+                    isSettingsRoute
+                      ? Locale.NewChat.Return
+                      : Locale.Settings.Title
+                  }
+                  icon={isSettingsRoute ? <HomeIcon /> : <SettingsIcon />}
                   shadow
                 />
               </Link>
@@ -330,6 +387,27 @@ export function SideBar(props: { className?: string }) {
                 />
               </a>
             </div>
+            <div className={styles["sidebar-action"]}>
+              <Link
+                to={isCustomProviderRoute ? Path.Home : Path.CustomProvider}
+              >
+                <IconButton
+                  aria={
+                    isCustomProviderRoute
+                      ? Locale.NewChat.Return
+                      : Locale.CustomProvider.Title
+                  }
+                  icon={
+                    isCustomProviderRoute ? (
+                      <HomeIcon />
+                    ) : (
+                      <CustomProviderIcon />
+                    )
+                  }
+                  shadow
+                />
+              </Link>
+            </div>
           </>
         }
         secondaryAction={
@@ -338,7 +416,7 @@ export function SideBar(props: { className?: string }) {
             text={shouldNarrow ? undefined : Locale.Home.NewChat}
             onClick={() => {
               if (config.dontShowMaskSplashScreen) {
-                chatStore.newSession();
+                chatStore.newSession(chatStore.currentSession().mask);
                 navigate(Path.Chat);
               } else {
                 navigate(Path.NewChat);

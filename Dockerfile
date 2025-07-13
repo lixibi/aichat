@@ -1,4 +1,4 @@
-FROM node:18-alpine AS base
+FROM node:22-alpine AS base
 
 FROM base AS deps
 
@@ -8,11 +8,41 @@ WORKDIR /app
 
 COPY package.json yarn.lock ./
 
-RUN yarn config set registry 'https://registry.npmmirror.com/'
-RUN yarn install
+# 设置多个Yarn镜像源并尝试安装（POSIX兼容写法）
+RUN set -e; \
+    registries="https://registry.npmmirror.com/ https://registry.npmjs.org/ https://registry.yarnpkg.com/"; \
+    success=0; \
+    for registry in $registries; do \
+        echo "尝试Yarn镜像源: $registry"; \
+        yarn config set registry "$registry"; \
+        if yarn install --network-timeout 300000; then \
+            echo "成功使用镜像源: $registry"; \
+            success=1; \
+            break; \
+        else \
+            echo "镜像源 $registry 失败，尝试下一个..."; \
+            yarn cache clean; \
+        fi; \
+    done; \
+    if [ $success -ne 1 ]; then echo "所有镜像源尝试失败"; exit 1; fi
 
-# 安装 sharp 用于图像优化
-RUN npm install sharp
+# 安装sharp时设置多个npm镜像源（POSIX兼容写法）
+RUN set -e; \
+    registries="https://registry.npmmirror.com/ https://registry.npmjs.org/ https://registry.yarnpkg.com/"; \
+    success=0; \
+    for registry in $registries; do \
+        echo "尝试npm镜像源: $registry"; \
+        npm config set registry "$registry"; \
+        if npm install sharp; then \
+            echo "成功使用镜像源安装sharp: $registry"; \
+            success=1; \
+            break; \
+        else \
+            echo "镜像源 $registry 安装sharp失败，尝试下一个..."; \
+            npm cache clean --force; \
+        fi; \
+    done; \
+    if [ $success -ne 1 ]; then echo "所有sharp安装尝试失败"; exit 1; fi
 
 FROM base AS builder
 

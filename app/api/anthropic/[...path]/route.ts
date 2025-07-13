@@ -15,15 +15,19 @@ const ALLOWD_PATH = new Set([Anthropic.ChatPath, Anthropic.ChatPath1]);
 
 async function handle(
   req: NextRequest,
-  { params }: { params: { path: string[] } },
+  // { params }: { params: { path: string[] } },
 ) {
-  console.log("[Anthropic Route] params ", params);
+  // console.log("[Anthropic Route] params ", params);
 
   if (req.method === "OPTIONS") {
     return NextResponse.json({ body: "OK" }, { status: 200 });
   }
 
-  const subpath = params.path.join("/");
+  // Extract path from URL
+  const pathParts = req.nextUrl.pathname.split("/");
+  // Remove empty parts and the "api/anthropic" prefix
+  const subpath = pathParts.slice(3).join("/");
+  // const subpath = params.path.join("/");
 
   if (!ALLOWD_PATH.has(subpath)) {
     console.log("[Anthropic Route] forbidden path ", subpath);
@@ -139,6 +143,7 @@ async function request(req: NextRequest) {
       const modelTable = collectModelTable(
         DEFAULT_MODELS,
         serverConfig.customModels,
+        null,
       );
       const clonedBody = await req.text();
       fetchOptions.body = clonedBody;

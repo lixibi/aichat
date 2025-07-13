@@ -5,17 +5,19 @@
 
   pre,
   code {
-    font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+    font-family: inherit;
   }
 
   pre code {
     display: block;
     overflow-x: auto;
     padding: 1em;
+    white-space: pre-wrap; /* 允许换行 */
   }
 
   code {
     padding: 3px 5px;
+    white-space: pre-wrap; /* 允许换行 */
   }
 
   .hljs,

@@ -62,13 +62,13 @@
         max-width: calc(100% - 80px);
 
         .date {
-          font-size: 12px;
+          font-size: var(--text-xs);
           line-height: 1.2;
           opacity: 0.5;
         }
 
         .content {
-          font-size: 12px;
+          font-size: var(--text-xs);
         }
       }
 

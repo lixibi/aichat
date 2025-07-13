@@ -1,0 +1,74 @@
+[
+  {
+    "trigger": ":code",
+    "replacement": "```\n$|$\n```",
+    "description": "Code block with cursor inside",
+    "enable": true
+  },
+  {
+    "trigger": ":now",
+    "replacement": "{{datetime}}",
+    "description": "Current date and time",
+    "enable": true
+  },
+  {
+    "trigger": ":date",
+    "replacement": "{{date}}",
+    "description": "Current date",
+    "enable": true
+  },
+  {
+    "trigger": ":time",
+    "replacement": "{{time}}",
+    "description": "Current time",
+    "enable": true
+  },
+  {
+    "trigger": ":todo",
+    "replacement": "- [ ] ",
+    "description": "Markdown todo",
+    "enable": true
+  },
+  {
+    "trigger": ":table",
+    "replacement": "| $|$ | | |\n|---|---|---|\n| | | |",
+    "description": "Markdown table",
+    "enable": true
+  },
+  {
+    "trigger": ":math",
+    "replacement": "$$\n$|$\n$$",
+    "description": "Markdown math",
+    "enable": true
+  },
+  {
+    "trigger": ":kbd",
+    "replacement": "<kbd>$|$</kbd>",
+    "description": "keyboard/键盘按键样式",
+    "enable": true
+  },
+  {
+    "trigger": ":js",
+    "replacement": "```javascript\n$|$\n```",
+    "description": "JavaScript code block",
+    "enable": true
+  },
+  {
+    "trigger": ":py",
+    "replacement": "```python\n$|$\n```",
+    "description": "Python code block",
+    "enable": true
+  },
+  {
+    "trigger": ":sql",
+    "replacement": "```sql\n$|$\n```",
+    "description": "SQL code block",
+    "enable": true
+  },
+  {
+    "trigger": ":json",
+    "replacement": "```json\n$|$\n```",
+    "description": "JSON code block",
+    "enable": true
+  }
+]

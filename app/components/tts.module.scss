@@ -75,14 +75,14 @@
 
         .plugin-title {
           .plugin-name {
-            font-size: 14px;
+            font-size: var(--text-sm);
             font-weight: bold;
           }
           .plugin-info {
-            font-size: 12px;
+            font-size: var(--text-xs);
           }
           .plugin-runtime-warning {
-            font-size: 12px;
+            font-size: var(--text-xs);
             color: #f86c6c;
           }
         }

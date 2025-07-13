@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="50" height="50">
+  <defs/>
+  <!-- 主圆环 -->
+  <circle cx="100" cy="100" r="80" fill="var(--primary, #5C7CFA)"/>
+
+  <!-- "AI" 文字 -->
+  <text 
+    x="90" 
+    y="125" 
+    text-anchor="middle" 
+    font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+    font-size="80" 
+    font-weight="bold" 
+    font-style="italic" 
+    fill="#FFFFFF">AI</text>
+
+  <!-- 移动的光点：颜色改为亮黄色 -->
+  <circle cx="100" cy="20" r="10" fill="#FFDE59">
+    <animateTransform 
+      attributeName="transform"
+      type="rotate"
+      from="0 100 100"
+      to="360 100 100"
+      dur="3s"
+      repeatCount="indefinite"
+    />
+  </circle>
+</svg>

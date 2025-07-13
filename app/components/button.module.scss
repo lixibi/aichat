@@ -1,4 +1,5 @@
 .icon-button {
+  font-family: inherit;
   background-color: var(--white);
   border-radius: 10px;
   display: flex;
@@ -7,7 +8,7 @@
   padding: 10px;
 
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.1s ease;
   overflow: hidden;
   user-select: none;
   outline: none;
@@ -43,6 +44,66 @@
     }
   }
 
+  &.success {
+    color: rgba($color: green, $alpha: 0.8);
+    border-color: rgba($color: green, $alpha: 0.5);
+    background-color: rgba($color: green, $alpha: 0.05);
+
+    &:hover {
+      border-color: green;
+      background-color: rgba($color: green, $alpha: 0.1);
+    }
+
+    path {
+      fill: green !important;
+    }
+  }
+
+  &.info {
+    color: rgba($color: blue, $alpha: 0.8);
+    border-color: rgba($color: blue, $alpha: 0.5);
+    background-color: rgba($color: blue, $alpha: 0.05);
+
+    &:hover {
+      border-color: blue;
+      background-color: rgba($color: blue, $alpha: 0.1);
+    }
+
+    path {
+      fill: blue !important;
+    }
+  }
+
+  &.warning {
+    color: rgba($color: orange, $alpha: 0.8);
+    border-color: rgba($color: orange, $alpha: 0.5);
+    background-color: rgba($color: orange, $alpha: 0.05);
+
+    &:hover {
+      border-color: orange;
+      background-color: rgba($color: orange, $alpha: 0.1);
+    }
+
+    path {
+      fill: orange !important;
+    }
+  }
+
+  &.secondary {
+    color: rgba($color: gray, $alpha: 0.8);
+    border-color: rgba($color: gray, $alpha: 0.5);
+    background-color: rgba($color: gray, $alpha: 0.05);
+
+    &:hover {
+      border-color: gray;
+      background-color: rgba($color: gray, $alpha: 0.1);
+    }
+
+    path {
+      fill: gray !important;
+    }
+  }
+
   &:hover,
   &:focus {
     border-color: var(--primary);
@@ -67,12 +128,12 @@
 
 @media only screen and (max-width: 600px) {
   .icon-button {
-    padding: 16px;
+    padding: 10px;
   }
 }
 
 .icon-button-text {
-  font-size: 12px;
+  font-size: var(--text-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

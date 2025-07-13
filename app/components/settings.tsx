@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 
 import styles from "./settings.module.scss";
+import { useCustomCssStore } from "../store/customCss";
 
 import ResetIcon from "../icons/reload.svg";
 import AddIcon from "../icons/add.svg";
@@ -18,6 +19,7 @@ import ConfirmIcon from "../icons/confirm.svg";
 import ConnectionIcon from "../icons/connection.svg";
 import CloudSuccessIcon from "../icons/cloud-success.svg";
 import CloudFailIcon from "../icons/cloud-fail.svg";
+import CustomProviderIcon from "../icons/custom-models.svg";
 
 import {
   Input,
@@ -40,6 +42,7 @@ import {
   useUpdateStore,
   useAccessStore,
   useAppConfig,
+  useCustomProviderStore,
 } from "../store";
 
 import Locale, {
@@ -61,8 +64,13 @@ import {
   ServiceProvider,
   SlotID,
   UPDATE_URL,
+  THEME_REPO_URL,
 } from "../constant";
 import { Prompt, SearchService, usePromptStore } from "../store/prompt";
+import {
+  TextExpansionRule,
+  useExpansionRulesStore,
+} from "../store/expansionRules";
 import { ErrorBoundary } from "./error";
 import { InputRange } from "./input-range";
 import { useNavigate } from "react-router-dom";
@@ -73,6 +81,68 @@ import { nanoid } from "nanoid";
 import { useMaskStore } from "../store/mask";
 import { ProviderType } from "../utils/cloud";
 import { TTSConfigList } from "./tts-config";
+
+function CustomCssModal(props: { onClose?: () => void }) {
+  const customCss = useCustomCssStore();
+  const [cssContent, setCssContent] = useState(customCss.content);
+
+  const handleSave = () => {
+    customCss.update((state) => {
+      state.content = cssContent;
+      state.lastUpdated = Date.now();
+      if (cssContent.trim().length > 0 && !state.enabled) {
+        state.enabled = true;
+      }
+    });
+    props.onClose?.();
+  };
+  const openThemeRepo = () => {
+    window.open(THEME_REPO_URL, "_blank", "noopener");
+  };
+
+  return (
+    <div className="modal-mask">
+      <Modal
+        title={Locale.Settings.CustomCSS.Title}
+        onClose={() => props.onClose?.()}
+        actions={[
+          <IconButton
+            key="theme-repo"
+            text={Locale.Settings.CustomCSS.More}
+            onClick={openThemeRepo}
+            bordered
+          />,
+          <IconButton
+            key="cancel"
+            text={Locale.UI.Cancel}
+            onClick={props.onClose}
+            bordered
+          />,
+          <IconButton
+            key="save"
+            text={Locale.Chat.Actions.Save}
+            type="primary"
+            onClick={handleSave}
+          />,
+        ]}
+      >
+        <div className={styles["edit-prompt-modal"]}>
+          <div className={styles["custom-css-hint"]}>
+            {Locale.Settings.CustomCSS.Hint}
+          </div>
+
+          <Input
+            value={cssContent}
+            placeholder=":root { --primary: #4385f5; }"
+            className={styles["edit-prompt-content"]}
+            rows={15}
+            onInput={(e) => setCssContent(e.currentTarget.value)}
+          />
+        </div>
+      </Modal>
+    </div>
+  );
+}
 
 function EditPromptModal(props: { id: string; onClose: () => void }) {
   const promptStore = usePromptStore();
@@ -122,7 +192,371 @@ function EditPromptModal(props: { id: string; onClose: () => void }) {
     </div>
   ) : null;
 }
+function ExpansionRulesModal(props: { onClose: () => void }) {
+  const [editingRule, setEditingRule] =
+    useState<Partial<TextExpansionRule> | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const rulesStore = useExpansionRulesStore();
+  const userRules = rulesStore.getUserRules();
+  const builtinRules = rulesStore.builtinRules;
 
+  // 全选/取消全选用户规则
+  const toggleAllUserRules = (enable: boolean) => {
+    userRules.forEach((rule) => {
+      rulesStore.updateRule(rule.id, (r) => {
+        r.enable = enable;
+      });
+    });
+  };
+
+  // 全选/取消全选内置规则
+  const toggleAllBuiltinRules = (enable: boolean) => {
+    // 创建一个新的内置规则数组副本
+    const newBuiltinRules = [...builtinRules];
+
+    // 更新每个内置规则的启用状态
+    newBuiltinRules.forEach((rule, index) => {
+      newBuiltinRules[index] = { ...rule, enable: enable };
+    });
+
+    // 设置更新后的内置规则
+    rulesStore.setBuiltinRules(newBuiltinRules);
+  };
+
+  const createOrUpdateRule = () => {
+    if (!editingRule || !editingRule.trigger || !editingRule.replacement)
+      return;
+
+    if (editingRule.id) {
+      // 更新规则
+      rulesStore.updateRule(editingRule.id, (rule) => {
+        rule.trigger = editingRule.trigger || rule.trigger;
+        rule.replacement = editingRule.replacement || rule.replacement;
+        rule.description = editingRule.description || rule.description;
+        rule.enable =
+          editingRule.enable !== undefined ? editingRule.enable : rule.enable;
+      });
+    } else {
+      // 创建新规则
+      rulesStore.addRule({
+        trigger: editingRule.trigger,
+        replacement: editingRule.replacement,
+        description: editingRule.description || "",
+        enable: editingRule.enable !== undefined ? editingRule.enable : true,
+      });
+    }
+
+    setEditingRule(null);
+    setIsCreating(false);
+  };
+
+  const toggleRuleStatus = (rule: TextExpansionRule) => {
+    if (rule.isUser) {
+      rulesStore.updateRule(rule.id, (r) => {
+        r.enable = !r.enable;
+      });
+    } else {
+      // 内置规则 - 更新内置规则数组
+      const newBuiltinRules = [...rulesStore.builtinRules];
+      const ruleIndex = newBuiltinRules.findIndex((r) => r.id === rule.id);
+      if (ruleIndex >= 0) {
+        newBuiltinRules[ruleIndex] = {
+          ...newBuiltinRules[ruleIndex],
+          enable: !rule.enable,
+        };
+        rulesStore.setBuiltinRules(newBuiltinRules);
+      }
+    }
+  };
+
+  const deleteRule = (rule: TextExpansionRule) => {
+    if (rule.isUser) {
+      rulesStore.removeRule(rule.id);
+    }
+  };
+
+  return (
+    <div className="modal-mask">
+      <Modal
+        title={Locale.Settings.Expansion.Rules}
+        onClose={props.onClose}
+        actions={[
+          <IconButton
+            key="add"
+            onClick={() => {
+              setEditingRule({
+                trigger: "",
+                replacement: "",
+                description: "",
+                enable: true,
+                isUser: true,
+              });
+              setIsCreating(true);
+            }}
+            icon={<AddIcon />}
+            bordered
+            text={Locale.Settings.Expansion.AddRule}
+          />,
+          <IconButton
+            key="confirm"
+            onClick={props.onClose}
+            icon={<ConfirmIcon />}
+            bordered
+            text={Locale.UI.Confirm}
+          />,
+        ]}
+      >
+        <div className={styles["expansion-rules-container"]}>
+          <div className={styles["expansion-rules-section"]}>
+            <div className={styles["expansion-section-header"]}>
+              <div className={styles["expansion-section-title"]}>
+                {Locale.Settings.Expansion.UserRules}
+              </div>
+              <div className={styles["expansion-section-actions"]}>
+                <button
+                  onClick={() => toggleAllUserRules(true)}
+                  className={styles["expansion-select-all"]}
+                >
+                  {Locale.Settings.Expansion.SelectAll}
+                </button>
+                <button
+                  onClick={() => toggleAllUserRules(false)}
+                  className={styles["expansion-deselect-all"]}
+                >
+                  {Locale.Settings.Expansion.UnselectAll}
+                </button>
+              </div>
+            </div>
+
+            {userRules.length === 0 ? (
+              <div className={styles["expansion-empty"]}>
+                {Locale.Settings.Expansion.NoUserRules}
+              </div>
+            ) : (
+              <div className={styles["expansion-rules-list"]}>
+                {userRules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className={`${styles["list-item"]} ${
+                      !rule.enable ? styles["disabled-rule"] : ""
+                    }`}
+                  >
+                    <div className={styles["expansion-rule-content"]}>
+                      <div className={styles["expansion-rule-title"]}>
+                        {rule.trigger}
+                      </div>
+                      <div className={styles["expansion-rule-desc"]}>
+                        {rule.description || rule.replacement}
+                      </div>
+                    </div>
+                    <div className={styles["expansion-rule-actions"]}>
+                      <input
+                        type="checkbox"
+                        checked={rule.enable}
+                        onChange={() => toggleRuleStatus(rule)}
+                      />
+                      <IconButton
+                        icon={<EditIcon />}
+                        onClick={() => setEditingRule({ ...rule })}
+                      />
+                      <IconButton
+                        icon={<ClearIcon />}
+                        onClick={() => deleteRule(rule)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className={styles["expansion-rules-section"]}>
+            <div className={styles["expansion-section-header"]}>
+              <div className={styles["expansion-section-title"]}>
+                {Locale.Settings.Expansion.BuiltinRules}
+              </div>
+              <div className={styles["expansion-section-actions"]}>
+                <button
+                  onClick={() => toggleAllBuiltinRules(true)}
+                  className={styles["expansion-select-all"]}
+                >
+                  {Locale.Settings.Expansion.SelectAll}
+                </button>
+                <button
+                  onClick={() => toggleAllBuiltinRules(false)}
+                  className={styles["expansion-deselect-all"]}
+                >
+                  {Locale.Settings.Expansion.UnselectAll}
+                </button>
+              </div>
+            </div>
+
+            <div className={styles["expansion-rules-list"]}>
+              {builtinRules.map((rule) => (
+                <div
+                  key={rule.id}
+                  className={`${styles["list-item"]} ${
+                    !rule.enable ? styles["disabled-rule"] : ""
+                  }`}
+                >
+                  <div className={styles["expansion-rule-content"]}>
+                    <div className={styles["expansion-rule-title"]}>
+                      {rule.trigger}
+                    </div>
+                    <div className={styles["expansion-rule-desc"]}>
+                      {rule.description || rule.replacement}
+                    </div>
+                  </div>
+                  <div className={styles["expansion-rule-actions"]}>
+                    <input
+                      type="checkbox"
+                      checked={rule.enable}
+                      onChange={() => toggleRuleStatus(rule)}
+                    />
+                    <IconButton
+                      icon={<EyeIcon />}
+                      onClick={() =>
+                        setEditingRule({
+                          ...rule,
+                          id: undefined,
+                          isUser: false,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {(editingRule || isCreating) && (
+          <div className="modal-mask">
+            <Modal
+              title={
+                isCreating
+                  ? Locale.Settings.Expansion.AddRule
+                  : Locale.Settings.Expansion.EditRule
+              }
+              onClose={() => {
+                setEditingRule(null);
+                setIsCreating(false);
+              }}
+              actions={[
+                <IconButton
+                  key="cancel"
+                  text={Locale.UI.Cancel}
+                  onClick={() => {
+                    setEditingRule(null);
+                    setIsCreating(false);
+                  }}
+                  bordered
+                />,
+                <IconButton
+                  key="confirm"
+                  text={Locale.UI.Confirm}
+                  type="primary"
+                  onClick={createOrUpdateRule}
+                />,
+              ]}
+            >
+              <List>
+                <ListItem title={Locale.Settings.Expansion.Trigger}>
+                  <Input
+                    style={{ width: "300px" }}
+                    // readOnly={!editingRule?.isUser}
+                    value={editingRule?.trigger || ""}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setEditingRule((prev) =>
+                        prev ? { ...prev, trigger: e.target.value } : null,
+                      )
+                    }
+                  />
+                </ListItem>
+                <ListItem
+                  title={Locale.Settings.Expansion.Replacement}
+                  subTitle={Locale.Settings.Expansion.ReplacementHint}
+                >
+                  <Input
+                    rows={4}
+                    style={{ width: "300px" }}
+                    // readOnly={!editingRule?.isUser}
+                    value={editingRule?.replacement || ""}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setEditingRule((prev) =>
+                        prev ? { ...prev, replacement: e.target.value } : null,
+                      )
+                    }
+                  />
+                </ListItem>
+                <ListItem title={Locale.Settings.Expansion.Description}>
+                  <Input
+                    style={{ width: "300px" }}
+                    // readOnly={!editingRule?.isUser}
+                    value={editingRule?.description || ""}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setEditingRule((prev) =>
+                        prev ? { ...prev, description: e.target.value } : null,
+                      )
+                    }
+                  />
+                </ListItem>
+                <ListItem title={Locale.Settings.Expansion.Enabled}>
+                  <input
+                    type="checkbox"
+                    checked={editingRule?.enable}
+                    onChange={(e) =>
+                      setEditingRule((prev) =>
+                        prev ? { ...prev, enable: e.target.checked } : null,
+                      )
+                    }
+                  />
+                </ListItem>
+              </List>
+            </Modal>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+function CustomUserContinuePromptModal(props: { onClose?: () => void }) {
+  const config = useAppConfig();
+  const updateConfig = config.update;
+
+  return (
+    <div className="modal-mask">
+      <Modal
+        title={Locale.Settings.Prompt.CustomUserContinuePrompt.Title}
+        onClose={() => props.onClose?.()}
+        actions={[
+          <IconButton
+            key="primary"
+            onClick={props.onClose}
+            icon={<ConfirmIcon />}
+            bordered
+            text={Locale.UI.Confirm}
+          />,
+        ]}
+      >
+        <div className={styles["edit-prompt-modal"]}>
+          <Input
+            value={config.customUserContinuePrompt || ""}
+            placeholder={Locale.Chat.InputActions.Continue.ContinuePrompt}
+            className={styles["edit-prompt-content"]}
+            rows={10}
+            onInput={(e) =>
+              updateConfig(
+                (config) =>
+                  (config.customUserContinuePrompt = e.currentTarget.value),
+              )
+            }
+          ></Input>
+        </div>
+      </Modal>
+    </div>
+  );
+}
 function UserPromptModal(props: { onClose?: () => void }) {
   const promptStore = usePromptStore();
   const userPrompts = promptStore.getUserPrompts();
@@ -250,14 +684,29 @@ function DangerItems() {
         />
       </ListItem>
       <ListItem
-        title={Locale.Settings.Danger.Clear.Title}
-        subTitle={Locale.Settings.Danger.Clear.SubTitle}
+        title={Locale.Settings.Danger.ClearChat.Title}
+        subTitle={Locale.Settings.Danger.ClearChat.SubTitle}
       >
         <IconButton
-          aria={Locale.Settings.Danger.Clear.Title}
-          text={Locale.Settings.Danger.Clear.Action}
+          aria={Locale.Settings.Danger.ClearChat.Title}
+          text={Locale.Settings.Danger.ClearChat.Action}
           onClick={async () => {
-            if (await showConfirm(Locale.Settings.Danger.Clear.Confirm)) {
+            if (await showConfirm(Locale.Settings.Danger.ClearChat.Confirm)) {
+              chatStore.clearAllChatData();
+            }
+          }}
+          type="danger"
+        />
+      </ListItem>
+      <ListItem
+        title={Locale.Settings.Danger.ClearALL.Title}
+        subTitle={Locale.Settings.Danger.ClearALL.SubTitle}
+      >
+        <IconButton
+          aria={Locale.Settings.Danger.ClearALL.Title}
+          text={Locale.Settings.Danger.ClearALL.Action}
+          onClick={async () => {
+            if (await showConfirm(Locale.Settings.Danger.ClearALL.Confirm)) {
               chatStore.clearAllData();
             }
           }}
@@ -475,6 +924,7 @@ function SyncItems() {
   const chatStore = useChatStore();
   const promptStore = usePromptStore();
   const maskStore = useMaskStore();
+  const providerStore = useCustomProviderStore();
   const couldSync = useMemo(() => {
     return syncStore.cloudSync();
   }, [syncStore]);
@@ -490,8 +940,14 @@ function SyncItems() {
       message: messageCount,
       prompt: Object.keys(promptStore.prompts).length,
       mask: Object.keys(maskStore.masks).length,
+      provider: providerStore.providers.length,
     };
-  }, [chatStore.sessions, maskStore.masks, promptStore.prompts]);
+  }, [
+    chatStore.sessions,
+    maskStore.masks,
+    promptStore.prompts,
+    providerStore.providers,
+  ]);
 
   return (
     <>
@@ -518,7 +974,25 @@ function SyncItems() {
             {couldSync && (
               <IconButton
                 icon={<ResetIcon />}
-                text={Locale.UI.Sync}
+                text={`${
+                  syncStore.syncState === "fetching"
+                    ? Locale.Settings.Sync.Fetching
+                    : syncStore.syncState === "merging"
+                    ? Locale.Settings.Sync.Merging
+                    : syncStore.syncState === "uploading"
+                    ? Locale.Settings.Sync.Uploading
+                    : syncStore.syncState === "error"
+                    ? Locale.Settings.Sync.Fail
+                    : syncStore.syncState === "success"
+                    ? Locale.Settings.Sync.Success
+                    : Locale.UI.Sync
+                }${
+                  syncStore.syncStateSize >= 0
+                    ? ` (${(syncStore.syncStateSize / 1024 / 1024).toFixed(
+                        2,
+                      )} MB)`
+                    : ""
+                }`}
                 onClick={async () => {
                   try {
                     await syncStore.sync();
@@ -578,6 +1052,8 @@ export function Settings() {
   const hasNewVersion = currentVersion !== remoteId;
   const updateUrl = getClientConfig()?.isApp ? RELEASE_URL : UPDATE_URL;
 
+  const [showExpansionRules, setShowExpansionRules] = useState(false);
+
   function checkUpdate(force = false) {
     setCheckingUpdate(true);
     updateStore.getLatestVersion(force).then(() => {
@@ -589,6 +1065,19 @@ export function Settings() {
   }
 
   const accessStore = useAccessStore();
+  if (config.modelConfig.model === "") {
+    config.modelConfig.model = accessStore.defaultModel;
+  }
+  if (config.modelConfig.compressModel === "") {
+    config.modelConfig.compressModel = accessStore.compressModel;
+  }
+  if (config.modelConfig.ocrModel === "") {
+    config.modelConfig.ocrModel = accessStore.ocrModel;
+  }
+  if (config.modelConfig.textProcessModel === "") {
+    config.modelConfig.textProcessModel = accessStore.textProcessModel;
+  }
+
   const shouldHideBalanceQuery = useMemo(() => {
     const isOpenAiUrl = accessStore.openaiUrl.includes(OPENAI_BASE_URL);
 
@@ -631,6 +1120,13 @@ export function Settings() {
   const [shouldShowPromptModal, setShowPromptModal] = useState(false);
   const [shouldShowPersonalization, setShowPersonalization] = useState(false);
   const [shouldShowModelSettings, setshouldShowModelSettings] = useState(false);
+  const [
+    shouldShowCustomContinuePromptModal,
+    setShowCustomContinuePromptModal,
+  ] = useState(false);
+
+  const [shouldShowCustomCssModal, setShowCustomCssModal] = useState(false);
+  const customCss = useCustomCssStore();
 
   const showUsage = accessStore.isAuthorized();
   useEffect(() => {
@@ -792,6 +1288,35 @@ export function Settings() {
                   </Select>
                 </ListItem>
 
+                <ListItem
+                  title={Locale.Settings.CustomCSS.Title}
+                  subTitle={
+                    customCss.enabled
+                      ? Locale.Settings.CustomCSS.SubTitleEnabled
+                      : Locale.Settings.CustomCSS.SubTitleDisabled
+                  }
+                >
+                  <div style={{ display: "flex", alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={customCss.enabled}
+                      onChange={(e) => {
+                        if (e.currentTarget.checked) {
+                          customCss.enable();
+                        } else {
+                          customCss.disable();
+                        }
+                      }}
+                      style={{ marginRight: "10px" }}
+                    />
+                    <IconButton
+                      icon={<EditIcon />}
+                      text={Locale.Settings.CustomCSS.Edit}
+                      onClick={() => setShowCustomCssModal(true)}
+                    />
+                  </div>
+                </ListItem>
+
                 <ListItem title={Locale.Settings.Lang.Name}>
                   <Select
                     value={getLang()}
@@ -894,6 +1419,23 @@ export function Settings() {
                     }
                   ></input>
                 </ListItem>
+                <ListItem
+                  title={Locale.Mask.Config.FloatingButton.Title}
+                  subTitle={Locale.Mask.Config.FloatingButton.SubTitle}
+                >
+                  <input
+                    aria-label={Locale.Mask.Config.FloatingButton.Title}
+                    type="checkbox"
+                    checked={config.enableFloatingButton}
+                    onChange={(e) =>
+                      updateConfig(
+                        (config) =>
+                          (config.enableFloatingButton =
+                            e.currentTarget.checked),
+                      )
+                    }
+                  ></input>
+                </ListItem>
               </>
             )}
           </>
@@ -966,6 +1508,31 @@ export function Settings() {
               onClick={() => setShowPromptModal(true)}
             />
           </ListItem>
+          <ListItem
+            title={Locale.Settings.Prompt.CustomUserContinuePrompt.Enable}
+          >
+            <input
+              type="checkbox"
+              checked={config.enableShowUserContinuePrompt}
+              onChange={(e) =>
+                updateConfig(
+                  (config) =>
+                    (config.enableShowUserContinuePrompt =
+                      e.currentTarget.checked),
+                )
+              }
+            ></input>
+          </ListItem>
+          <ListItem
+            title={Locale.Settings.Prompt.CustomUserContinuePrompt.Title}
+            subTitle={Locale.Settings.Prompt.CustomUserContinuePrompt.SubTitle}
+          >
+            <IconButton
+              icon={<EditIcon />}
+              text={Locale.Settings.Prompt.CustomUserContinuePrompt.Edit}
+              onClick={() => setShowCustomContinuePromptModal(true)}
+            />
+          </ListItem>
         </List>
 
         <List id={SlotID.CustomModel}>
@@ -996,17 +1563,27 @@ export function Settings() {
                     title={Locale.Settings.Access.CustomEndpoint.Title}
                     subTitle={Locale.Settings.Access.CustomEndpoint.SubTitle}
                   >
-                    <input
-                      aria-label={Locale.Settings.Access.CustomEndpoint.Title}
-                      type="checkbox"
-                      checked={accessStore.useCustomConfig}
-                      onChange={(e) =>
-                        accessStore.update(
-                          (access) =>
-                            (access.useCustomConfig = e.currentTarget.checked),
-                        )
-                      }
-                    ></input>
+                    <div style={{ display: "flex", alignItems: "center" }}>
+                      <IconButton
+                        text={Locale.Settings.Access.CustomEndpoint.Advanced}
+                        type="info"
+                        icon={<CustomProviderIcon />}
+                        onClick={() => navigate(Path.CustomProvider)}
+                        bordered
+                      />
+                      <input
+                        aria-label={Locale.Settings.Access.CustomEndpoint.Title}
+                        type="checkbox"
+                        checked={accessStore.useCustomConfig}
+                        onChange={(e) =>
+                          accessStore.update(
+                            (access) =>
+                              (access.useCustomConfig =
+                                e.currentTarget.checked),
+                          )
+                        }
+                      ></input>
+                    </div>
                   </ListItem>
                 )
               }
@@ -1062,6 +1639,7 @@ export function Settings() {
                         subTitle={Locale.Settings.Access.OpenAI.ApiKey.SubTitle}
                       >
                         <PasswordInput
+                          style={{ width: "300px" }}
                           aria={Locale.Settings.ShowPassword}
                           aria-label={
                             Locale.Settings.Access.OpenAI.ApiKey.Title
@@ -1402,10 +1980,48 @@ export function Settings() {
           )}
         </List>
 
+        {shouldShowCustomCssModal && (
+          <CustomCssModal onClose={() => setShowCustomCssModal(false)} />
+        )}
         {shouldShowPromptModal && (
           <UserPromptModal onClose={() => setShowPromptModal(false)} />
         )}
+        {shouldShowCustomContinuePromptModal && (
+          <CustomUserContinuePromptModal
+            onClose={() => setShowCustomContinuePromptModal(false)}
+          />
+        )}
+        <List>
+          <ListItem
+            title={Locale.Settings.Expansion.EnabledTitle}
+            subTitle={Locale.Settings.Expansion.EnabledSubTitle}
+          >
+            <input
+              type="checkbox"
+              checked={config.enableTextExpansion}
+              onChange={(e) =>
+                config.update(
+                  (config) =>
+                    (config.enableTextExpansion = e.currentTarget.checked),
+                )
+              }
+            />
+          </ListItem>
+          <ListItem
+            title={Locale.Settings.Expansion.Title}
+            subTitle={Locale.Settings.Expansion.SubTitle}
+          >
+            <IconButton
+              icon={<EditIcon />}
+              text={Locale.Settings.Expansion.Manage}
+              onClick={() => setShowExpansionRules(true)}
+            />
+          </ListItem>
+        </List>
 
+        {showExpansionRules && (
+          <ExpansionRulesModal onClose={() => setShowExpansionRules(false)} />
+        )}
         <List>
           <TTSConfigList
             ttsConfig={config.ttsConfig}

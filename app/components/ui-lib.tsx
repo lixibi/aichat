@@ -23,6 +23,7 @@ import React, {
   useRef,
 } from "react";
 import { IconButton } from "./button";
+import { useAccessStore } from "../store";
 
 export function Popover(props: {
   children: JSX.Element;
@@ -442,20 +443,270 @@ export function showPrompt(content: any, value = "", rows = 3) {
   });
 }
 
-export function showImageModal(img: string) {
-  showModal({
-    title: Locale.Export.Image.Modal,
-    children: (
-      <div>
+function ImageModalContent({ img }: { img: string }) {
+  const [rotation, setRotation] = useState(0); // 旋转角度
+  const [scale, setScale] = useState(1); // 缩放比例
+  const [isAdaptive, setIsAdaptive] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+
+  const handleRotateLeft = () => {
+    setRotation((prev) => prev - 90); // 向左旋转 90 度
+  };
+
+  const handleRotateRight = () => {
+    setRotation((prev) => prev + 90); // 向右旋转 90 度
+  };
+
+  const handleZoomIn = () => {
+    setScale((prev) => Math.min(prev + 0.1, 3)); // 放大，最大 3 倍
+  };
+
+  const handleZoomOut = () => {
+    setScale((prev) => Math.max(prev - 0.1, 0.1)); // 缩小，最小 0.1 倍
+  };
+
+  const handleResetToOriginal = () => {
+    setScale(1);
+    setRotation(0);
+    setIsAdaptive(false);
+  };
+
+  const handleToggleAdaptive = () => {
+    if (!isAdaptive) {
+      fitImageToContainer(); // Apply adaptive scaling
+      setIsAdaptive(true);
+    }
+  };
+
+  const fitImageToContainer = useCallback(() => {
+    if (!containerRef.current || !imageRef.current) return;
+
+    const container = containerRef.current;
+    const image = imageRef.current;
+
+    // Get natural dimensions of image
+    const imgWidth = image.naturalWidth;
+    const imgHeight = image.naturalHeight;
+
+    // Get available space (accounting for padding)
+    const availWidth = container.clientWidth - 40; // 20px padding on each side
+    const availHeight = container.clientHeight - 40;
+
+    // Calculate required scale to fit
+    const scaleX = availWidth / imgWidth;
+    const scaleY = availHeight / imgHeight;
+    const newScale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond 1:1
+
+    setScale(newScale);
+  }, []);
+
+  const handleDownload = async () => {
+    try {
+      // 生成带时间戳的文件名
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/:/g, "-")
+        .replace(/\..+/, "")
+        .replace("T", "_");
+      // 假设 img 是完整的 URL 字符串
+      const fileExt = getFileExtension(img) || "jpg"; // img 是你图片 URL 的变量
+      const fileName = `image_${timestamp}.${fileExt}`;
+
+      // 创建一个临时的下载链接
+      const link = document.createElement("a");
+      link.href = img; // 直接使用原始图片 URL
+      link.download = fileName; // 浏览器会尝试使用这个文件名
+
+      // 对于某些浏览器和服务器配置，可能需要设置 target="_blank" 来确保下载行为
+      // link.target = "_blank";
+      // link.rel = "noopener noreferrer"; // 安全考虑
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Download failed:", error);
+      alert(
+        "Failed to initiate download. The browser will handle the download. If it doesn't start, please check your browser settings or try right-clicking the image to save.",
+      );
+    }
+  };
+
+  // getFileExtension 函数保持不变
+  const getFileExtension = (url: string): string | null => {
+    // 移除查询参数和哈希，以正确匹配扩展名
+    const pathname = new URL(url).pathname;
+    const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
+    return match ? match[1].toLowerCase() : null;
+  };
+
+  useEffect(() => {
+    if (isAdaptive) {
+      fitImageToContainer();
+    }
+
+    const handleResize = () => {
+      if (isAdaptive) {
+        fitImageToContainer();
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [isAdaptive, fitImageToContainer]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const preventScroll = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 处理缩放逻辑
+      if (e.deltaY > 0) {
+        setScale((prev) => Math.max(prev - 0.1, 0.1));
+      } else {
+        setScale((prev) => Math.min(prev + 0.1, 3));
+      }
+    };
+
+    container.addEventListener("wheel", preventScroll, { passive: false });
+
+    return () => {
+      container.removeEventListener("wheel", preventScroll);
+    };
+  }, []);
+  const scalePercentage = Math.round(scale * 100);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%", // 确保填充模态框高度
+        overflow: "hidden", // 防止内容溢出
+      }}
+    >
+      {/* 图片内容区域 */}
+      <div
+        style={{
+          flex: 1,
+          overflow: "auto",
+          textAlign: "center",
+          padding: "20px",
+          backgroundColor: "#f0f0f0",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+        // onWheel={handleWheel}
+      >
         <img
+          ref={imageRef}
           src={img}
           alt="preview"
           style={{
             maxWidth: "100%",
+            transform: `rotate(${rotation}deg) scale(${scale})`,
+            transformOrigin: "center",
+            transition: "transform 0.3s ease",
           }}
-        ></img>
+          onLoad={() => {
+            if (isAdaptive) {
+              fitImageToContainer();
+            }
+          }}
+        />
       </div>
-    ),
+
+      {/* 底部横栏 */}
+      <div
+        style={{
+          padding: "10px",
+          backgroundColor: "#fff",
+          borderTop: "1px solid #ddd",
+          display: "flex",
+          justifyContent: "center",
+          gap: "10px",
+          boxShadow: "0 -2px 4px rgba(0,0,0,0.1)", // 可选：添加阴影
+        }}
+      >
+        <div className={styles["image-buttons-container"]}>
+          <button
+            className={styles["image-button"]}
+            onClick={handleZoomOut}
+            title="Zoom Out"
+          >
+            ➖
+          </button>
+          <span
+            className={styles["image-button"]}
+            style={{ cursor: "default" }}
+            title="Current Zoom Level"
+          >
+            {scalePercentage}%
+          </span>
+          <button
+            className={styles["image-button"]}
+            onClick={handleZoomIn}
+            title="Zoom In"
+          >
+            ➕
+          </button>
+          {!isAdaptive ? (
+            <button
+              className={styles["image-button"]}
+              onClick={handleToggleAdaptive}
+              title="Adaptive Scaling"
+            >
+              Fit
+            </button>
+          ) : (
+            <button
+              className={styles["image-button"]}
+              onClick={handleResetToOriginal}
+              title="Original Size"
+            >
+              1:1
+            </button>
+          )}
+          <button
+            className={styles["image-button"]}
+            onClick={handleRotateLeft}
+            title="Rotate Left"
+          >
+            ↺
+          </button>
+          <button
+            className={styles["image-button"]}
+            onClick={handleRotateRight}
+            title="Rotate Right"
+          >
+            ↻
+          </button>
+          <button
+            className={styles["image-button"]}
+            onClick={handleDownload}
+            title="Download Image"
+          >
+            💾
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function showImageModal(img: string) {
+  showModal({
+    title: Locale.Export.Image.Modal,
+    defaultMax: true,
+    children: <ImageModalContent img={img} />,
   });
 }
 export function SearchSelector<T>(props: {
@@ -482,6 +733,13 @@ export function SearchSelector<T>(props: {
   const [searchQuery, setSearchQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const accessStore = useAccessStore();
+
+  const [presetRules, setPresetRules] = useState<string[]>(
+    accessStore.selectLabels.split(",").filter((label) => label.trim() !== ""),
+  );
+  const [selectedRule, setSelectedRule] = useState<string>("");
+
   // 当组件加载时自动聚焦到输入框
   useEffect(() => {
     if (inputRef.current) {
@@ -505,14 +763,23 @@ export function SearchSelector<T>(props: {
   };
   // 过滤列表项
   const filteredItems = props.items
-    .filter(
-      (item) =>
+    .filter((item) => {
+      // 检查是否匹配搜索框
+      const searchMatch =
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.subTitle &&
           item.subTitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (typeof item.value === "string" &&
-          item.value.toLowerCase().includes(searchQuery.toLowerCase())),
-    )
+          item.value.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      // 检查是否匹配下拉列表规则，仅匹配模型描述中的文本
+      const ruleMatch =
+        selectedRule === "" || // 如果未选择规则，则规则匹配为 true
+        (typeof item.subTitle === "string" &&
+          item.subTitle.toLowerCase().includes(selectedRule.toLowerCase()));
+
+      return searchMatch && ruleMatch; // 两者都匹配才返回 true
+    })
     .sort((a, b) => {
       // 将选中的项目排在前面
       const aSelected = selectedValues.includes(a.value);
@@ -544,6 +811,34 @@ export function SearchSelector<T>(props: {
               onChange={(e) => setSearchQuery(e.target.value)}
               onClick={(e) => e.stopPropagation()}
             />
+            <select
+              className={styles["selector-rule-select"]}
+              value={selectedRule}
+              onChange={(e) => {
+                setSelectedRule(e.target.value);
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {presetRules.length === 0 ? (
+                <>
+                  <option value="">{Locale.UI.SelectALL}</option>
+                  <option value="" disabled>
+                    <option key="0" value={Locale.UI.NoPresetRule}>
+                      {Locale.UI.NoPresetRule}
+                    </option>
+                  </option>
+                </>
+              ) : (
+                <>
+                  <option value="">{Locale.UI.SelectALL}</option>
+                  {presetRules.map((rule, index) => (
+                    <option key={index} value={rule}>
+                      {rule}
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
           </div>
           {filteredItems.map((item, i) => {
             const selected = selectedValues.includes(item.value);
@@ -553,7 +848,7 @@ export function SearchSelector<T>(props: {
                   item.disable && styles["selector-item-disabled"]
                 }`}
                 key={i}
-                icon={<Avatar model={item.value as string} />}
+                icon={<Avatar model={item.title as string} />}
                 title={item.title}
                 subTitle={item.subTitle}
                 onClick={(e) => {

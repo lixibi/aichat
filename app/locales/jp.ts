@@ -102,11 +102,17 @@ const jp: PartialLocaleType = {
         Action: "今すぐリセットする",
         Confirm: "すべての設定項目をリセットしてもよろしいですか？",
       },
-      Clear: {
-        Title: "データを消去",
-        SubTitle: "すべてのチャット履歴と設定を消去します",
-        Action: "今すぐ消去する",
-        Confirm: "すべてのチャット履歴と設定を消去しますか？",
+      ClearChat: {
+        Title: "チャットデータを消去",
+        SubTitle: "すべてのチャットデータを消去します（設定は除く）",
+        Action: "今すぐ消去",
+        Confirm: "すべてのチャットデータを消去しますか？",
+      },
+      ClearALL: {
+        Title: "すべてのデータと設定を消去",
+        SubTitle: "すべてのチャットデータと設定を消去し、初期状態に戻します",
+        Action: "すべて消去",
+        Confirm: "すべてのチャットデータと設定を消去しますか？",
       },
     },
     Lang: {

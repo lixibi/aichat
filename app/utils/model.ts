@@ -10,6 +10,7 @@ const customProvider = (providerName: string) => ({
 export function collectModelTable(
   models: readonly LLMModel[],
   customModels: string,
+  accessStore: any,
 ) {
   const modelTable: Record<
     string,
@@ -23,13 +24,35 @@ export function collectModelTable(
     }
   > = {};
 
+  // 检查各提供商是否有配置 API key
+  const hasOpenAIKey = !!accessStore?.openaiApiKey || !!accessStore?.accessCode;
+  const hasAzureKey = !!accessStore?.azureApiKey;
+  const hasGoogleKey = !!accessStore?.googleApiKey;
+  const hasAnthropicKey = !!accessStore?.anthropicApiKey;
+
   // default models
   models.forEach((m) => {
+    // 根据提供商类型和是否有 API key 设置初始可用性
+    let available = m.available;
+    const providerType = m?.provider?.providerType;
+
+    // 根据提供商类型和 API key 配置调整可用性
+    if (providerType === "openai") {
+      available = available && hasOpenAIKey;
+    } else if (providerType === "azure") {
+      available = available && hasAzureKey;
+    } else if (providerType === "google") {
+      available = available && hasGoogleKey;
+    } else if (providerType === "anthropic") {
+      available = available && hasAnthropicKey;
+    }
+
     // using <modelName>@<providerType> as fullName
     modelTable[`${m.name}@${m?.provider?.providerType}`] = {
       ...m,
       displayName: m.name, // 'provider' is copied over if it exists
       description: "",
+      available,
     };
   });
 
@@ -91,7 +114,19 @@ export function collectModelTable(
           const provider = customProvider(
             customProviderName || customModelName,
           );
-          modelTable[`${customModelName}@${provider?.providerType}`] = {
+          // 检查新模型的可用性
+          const providerType = provider?.providerType;
+          let modelAvailable = available;
+          if (providerType === "openai") {
+            modelAvailable = modelAvailable && hasOpenAIKey;
+          } else if (providerType === "azure") {
+            modelAvailable = modelAvailable && hasAzureKey;
+          } else if (providerType === "google") {
+            modelAvailable = modelAvailable && hasGoogleKey;
+          } else if (providerType === "anthropic") {
+            modelAvailable = modelAvailable && hasAnthropicKey;
+          }
+          modelTable[`${customModelName}@${providerType}`] = {
             name: customModelName,
             displayName: displayName || customModelName,
             description: description || "",
@@ -107,9 +142,10 @@ export function collectModelTable(
 export function collectModelTableWithDefaultModel(
   models: readonly LLMModel[],
   customModels: string,
-  defaultModel: string,
+  accessStore: any,
 ) {
-  let modelTable = collectModelTable(models, customModels);
+  const defaultModel = accessStore.defaultModel;
+  let modelTable = collectModelTable(models, customModels, accessStore);
   if (defaultModel && defaultModel !== "") {
     if (defaultModel.includes("@")) {
       if (defaultModel in modelTable) {
@@ -136,8 +172,9 @@ export function collectModelTableWithDefaultModel(
 export function collectModels(
   models: readonly LLMModel[],
   customModels: string,
+  accessStore: any,
 ) {
-  const modelTable = collectModelTable(models, customModels);
+  const modelTable = collectModelTable(models, customModels, accessStore);
   const allModels = Object.values(modelTable);
 
   return allModels;
@@ -146,12 +183,12 @@ export function collectModels(
 export function collectModelsWithDefaultModel(
   models: readonly LLMModel[],
   customModels: string,
-  defaultModel: string,
+  accessStore: any,
 ) {
   const modelTable = collectModelTableWithDefaultModel(
     models,
     customModels,
-    defaultModel,
+    accessStore,
   );
   const allModels = Object.values(modelTable);
   return allModels;
@@ -161,8 +198,13 @@ export function isModelAvailableInServer(
   customModels: string,
   modelName: string,
   providerNames: string | string[],
+  accessStore: any,
 ) {
-  const modelTable = collectModelTable(DEFAULT_MODELS, customModels);
+  const modelTable = collectModelTable(
+    DEFAULT_MODELS,
+    customModels,
+    accessStore,
+  );
   const providerNamesArray = Array.isArray(providerNames)
     ? providerNames
     : [providerNames];

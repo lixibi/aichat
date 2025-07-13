@@ -20,11 +20,14 @@ const DANGER_CONFIG = {
   customHello: serverConfig.customHello,
   UnauthorizedInfo: serverConfig.UnauthorizedInfo,
   iconPosition: serverConfig.iconPosition,
-  translateModel: serverConfig.translateModel,
+  // translateModel: serverConfig.translateModel,
+  textProcessModel: serverConfig.textProcessModel,
   ocrModel: serverConfig.ocrModel,
   sidebarTitle: siderbarConfig.title,
   sidebarSubTitle: siderbarConfig.subTitle,
   siteTitle: siderbarConfig.siteTitle,
+  selectLabels: serverConfig.selectLabels,
+  modelParams: serverConfig.modelParams,
 };
 
 declare global {

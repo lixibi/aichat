@@ -140,11 +140,18 @@ const sk: PartialLocaleType = {
         Action: "Resetovať",
         Confirm: "Potvrdiť resetovanie všetkých nastavení na predvolené?",
       },
-      Clear: {
-        Title: "Vymazať všetky údaje",
-        SubTitle: "Vymazať všetky správy a nastavenia",
-        Action: "Vymazať",
-        Confirm: "Potvrdiť vymazanie všetkých správ a nastavení?",
+      ClearChat: {
+        Title: "Vymazať dáta z chatu",
+        SubTitle: "Vymazať všetky dáta z chatu (okrem nastavení)",
+        Action: "Vymazať teraz",
+        Confirm: "Potvrdiť vymazanie všetkých dát z chatu?",
+      },
+      ClearALL: {
+        Title: "Vymazať všetky dáta a nastavenia",
+        SubTitle:
+          "Vymazať všetky dáta z chatu a nastavenia, vrátiť sa do pôvodného stavu",
+        Action: "Vymazať všetko",
+        Confirm: "Potvrdiť vymazanie všetkých dát z chatu a nastavení?",
       },
     },
     Lang: {

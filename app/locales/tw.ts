@@ -147,14 +147,20 @@ const tw = {
 
     Danger: {
       Reset: {
-        Title: "重設所有設定",
-        SubTitle: "重設所有設定項回預設值",
-        Action: "立即重設",
-        Confirm: "確認重設所有設定？",
+        Title: "重置所有設定",
+        SubTitle: "重置所有設定項目為預設值（不包含聊天資料）",
+        Action: "立即重置",
+        Confirm: "確認重置所有設定？",
       },
-      Clear: {
-        Title: "清除所有資料",
-        SubTitle: "清除所有聊天、設定資料",
+      ClearChat: {
+        Title: "清除聊天資料",
+        SubTitle: "清除所有聊天資料（不包含設定）",
+        Action: "立即清除",
+        Confirm: "確認清除所有聊天資料？",
+      },
+      ClearALL: {
+        Title: "清除所有資料及設定",
+        SubTitle: "清除所有聊天、設定資料，恢復至初始狀態",
         Action: "立即清除",
         Confirm: "確認清除所有聊天、設定資料？",
       },
@@ -165,8 +171,8 @@ const tw = {
     },
     Avatar: "大頭貼",
     FontSize: {
-      Title: "字型大小",
-      SubTitle: "聊天內容的字型大小",
+      Title: "基準字型大小",
+      SubTitle: "整體程式風格的字型基準（1em），參考聊天標題的字型大小",
     },
     InjectSystemPrompts: {
       Title: "匯入系統提示",

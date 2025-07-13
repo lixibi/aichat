@@ -3,6 +3,7 @@ import { getServerSideConfig } from "../config/server";
 import { OPENAI_BASE_URL, ServiceProvider, OpenaiPath } from "../constant";
 import { isModelAvailableInServer } from "../utils/model";
 import { makeAzurePath } from "../azure";
+import { useAccessStore } from "../store";
 
 const serverConfig = getServerSideConfig();
 
@@ -91,7 +92,7 @@ export async function requestOpenai(req: NextRequest) {
       const models = [
         serverConfig.customModels,
         serverConfig.compressModel,
-        serverConfig.translateModel,
+        serverConfig.textProcessModel,
         serverConfig.ocrModel,
       ];
 
@@ -99,11 +100,12 @@ export async function requestOpenai(req: NextRequest) {
       const combinedModels = models.filter((model) => model).join(",");
       if (
         isChatRequest &&
-        !isModelAvailableInServer(combinedModels, jsonBody?.model as string, [
-          ServiceProvider.OpenAI,
-          ServiceProvider.Azure,
-          "custom" as string,
-        ])
+        !isModelAvailableInServer(
+          combinedModels,
+          jsonBody?.model as string,
+          [ServiceProvider.OpenAI, ServiceProvider.Azure, "custom" as string],
+          null,
+        )
       ) {
         return NextResponse.json(
           {

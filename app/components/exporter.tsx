@@ -1,7 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
-import { ChatMessage, ModelType, useAppConfig, useChatStore } from "../store";
+import { ChatMessage, useAppConfig, useChatStore } from "../store";
 import Locale from "../locales";
 import styles from "./exporter.module.scss";
+import chatStyles from "./chat.module.scss";
 import {
   List,
   ListItem,
@@ -15,6 +16,7 @@ import { IconButton } from "./button";
 import {
   copyToClipboard,
   downloadAs,
+  getMessageFiles,
   getMessageImages,
   useMobileScreen,
 } from "../utils";
@@ -36,11 +38,20 @@ import { toBlob, toPng } from "html-to-image";
 import { DEFAULT_MASK_AVATAR } from "../store/mask";
 
 import { prettyObject } from "../utils/format";
-import { EXPORT_MESSAGE_CLASS_NAME, ModelProvider } from "../constant";
+import {
+  EXPORT_MESSAGE_CLASS_NAME,
+  ModelProvider,
+  REPO_URL,
+} from "../constant";
 import { getClientConfig } from "../config/client";
 import { ClientApi } from "../client/api";
 import { getMessageTextContent } from "../utils";
 import { identifyDefaultClaudeModel } from "../utils/checkers";
+import { useAllModels } from "../utils/hooks";
+
+import { FileIcon, defaultStyles } from "react-file-icon";
+import type { DefaultExtensionType } from "react-file-icon";
+import { estimateMessageTokenInLLM } from "../store/chat";
 
 const Markdown = dynamic(async () => (await import("./markdown")).Markdown, {
   loading: () => <LoadingIcon />,
@@ -156,6 +167,8 @@ export function MessageExporter() {
   const [exportConfig, setExportConfig] = useState({
     format: "image" as ExportFormat,
     includeContext: true,
+    useDisplayName: true,
+    shareSessionTitle: "",
   });
 
   function updateExportConfig(updater: (config: typeof exportConfig) => void) {
@@ -183,15 +196,27 @@ export function MessageExporter() {
   function preview() {
     if (exportConfig.format === "text") {
       return (
-        <MarkdownPreviewer messages={selectedMessages} topic={session.topic} />
+        <MarkdownPreviewer
+          messages={selectedMessages}
+          topic={exportConfig.shareSessionTitle || session.topic}
+          useDisplayName={exportConfig.useDisplayName}
+        />
       );
     } else if (exportConfig.format === "json") {
       return (
-        <JsonPreviewer messages={selectedMessages} topic={session.topic} />
+        <JsonPreviewer
+          messages={selectedMessages}
+          topic={exportConfig.shareSessionTitle || session.topic}
+          useDisplayName={exportConfig.useDisplayName}
+        />
       );
     } else {
       return (
-        <ImagePreviewer messages={selectedMessages} topic={session.topic} />
+        <ImagePreviewer
+          messages={selectedMessages}
+          topic={exportConfig.shareSessionTitle || session.topic}
+          useDisplayName={exportConfig.useDisplayName}
+        />
       );
     }
   }
@@ -237,6 +262,36 @@ export function MessageExporter() {
               onChange={(e) => {
                 updateExportConfig(
                   (config) => (config.includeContext = e.currentTarget.checked),
+                );
+              }}
+            ></input>
+          </ListItem>
+          <ListItem
+            title={Locale.Export.UseDisplayName.Title}
+            subTitle={Locale.Export.UseDisplayName.SubTitle}
+          >
+            <input
+              type="checkbox"
+              checked={exportConfig.useDisplayName}
+              onChange={(e) => {
+                updateExportConfig(
+                  (config) => (config.useDisplayName = e.currentTarget.checked),
+                );
+              }}
+            ></input>
+          </ListItem>
+          <ListItem
+            title={Locale.Export.ShareSessionTitle.Title}
+            subTitle={Locale.Export.ShareSessionTitle.SubTitle}
+          >
+            <input
+              type="text"
+              style={{ width: "100%" }}
+              value={exportConfig.shareSessionTitle || session.topic}
+              onChange={(e) => {
+                updateExportConfig(
+                  (config) =>
+                    (config.shareSessionTitle = e.currentTarget.value),
                 );
               }}
             ></input>
@@ -387,13 +442,13 @@ export function PreviewActions(props: {
           icon={<DownloadIcon />}
           onClick={props.download}
         ></IconButton>
-        <IconButton
+        {/* <IconButton
           text={Locale.Export.Share}
           bordered
           shadow
           icon={loading ? <LoadingIcon /> : <ShareIcon />}
           onClick={share}
-        ></IconButton>
+        ></IconButton> */}
       </div>
       <div
         style={{
@@ -437,6 +492,7 @@ function ExportAvatar(props: ExportAvatarProps) {
 export function ImagePreviewer(props: {
   messages: ChatMessage[];
   topic: string;
+  useDisplayName: boolean;
 }) {
   const chatStore = useChatStore();
   const session = chatStore.currentSession();
@@ -528,7 +584,37 @@ export function ImagePreviewer(props: {
       dom.innerHTML = dom.innerHTML; // Refresh the content of the preview by resetting its HTML for fix a bug glitching
     }
   };
+  const allModels = useAllModels();
+  const currentModelName = useMemo(() => {
+    if (props.useDisplayName) {
+      const model = allModels.find(
+        (m) =>
+          m.name == mask.modelConfig.model &&
+          m?.provider?.providerName == mask.modelConfig.providerName,
+      );
+      return model?.displayName ?? mask.modelConfig.model;
+    } else {
+      return mask.modelConfig.model;
+    }
+  }, [allModels, mask.modelConfig.model, mask.modelConfig.providerName]);
 
+  const estimateMessagesToken = (messages: ChatMessage[]): number => {
+    let total = 0;
+
+    for (const message of messages) {
+      if (message.role === "assistant") {
+        // 处理 assistant 消息的 completionTokens
+        total +=
+          message.statistic?.completionTokens ??
+          estimateMessageTokenInLLM(message);
+      } else {
+        total +=
+          message.statistic?.singlePromptTokens ??
+          estimateMessageTokenInLLM(message);
+      }
+    }
+    return total;
+  };
   return (
     <div className={styles["image-previewer"]}>
       <PreviewActions
@@ -553,30 +639,51 @@ export function ImagePreviewer(props: {
 
           <div>
             <div className={styles["main-title"]}>NextChat</div>
-            <div className={styles["sub-title"]}>
-              github.com/QAbot-zh/ChatGPT-Next-Web
-            </div>
+            <div className={styles["sub-title"]}>{REPO_URL}</div>
             <div className={styles["icons"]}>
               <ExportAvatar avatar={config.avatar} />
               <span className={styles["icon-space"]}>&</span>
-              <ExportAvatar model={mask.modelConfig.model} />
+              <ExportAvatar model={currentModelName} />
             </div>
           </div>
           <div>
             <div className={styles["chat-info-item"]}>
-              {Locale.Exporter.Model}: {mask.modelConfig.model}
+              {Locale.Exporter.Model}: {currentModelName}
             </div>
             <div className={styles["chat-info-item"]}>
-              {Locale.Exporter.Messages}: {props.messages.length}
+              {Locale.Exporter.Messages}: {props.messages.length} (
+              {estimateMessagesToken(props.messages)} Tokens)
             </div>
             <div className={styles["chat-info-item"]}>
-              {Locale.Exporter.Topic}: {session.topic}
+              {Locale.Exporter.Topic}: {props.topic}
             </div>
             <div className={styles["chat-info-item"]}>
               {Locale.Exporter.Time}:{" "}
               {new Date(
                 props.messages.at(-1)?.date ?? Date.now(),
               ).toLocaleString()}
+            </div>
+            <div className={styles["chat-info-item"]}>
+              {[
+                `temp=${
+                  mask.modelConfig.temperature_enabled
+                    ? mask.modelConfig.temperature
+                    : "X"
+                }`,
+                `top_p=${
+                  mask.modelConfig.top_p_enabled ? mask.modelConfig.top_p : "X"
+                }`,
+                `P.P=${
+                  mask.modelConfig.presence_penalty_enabled
+                    ? mask.modelConfig.presence_penalty
+                    : "X"
+                }`,
+                `F.P=${
+                  mask.modelConfig.frequency_penalty_enabled
+                    ? mask.modelConfig.frequency_penalty
+                    : "X"
+                }`,
+              ].join(", ")}
             </div>
           </div>
         </div>
@@ -589,7 +696,13 @@ export function ImagePreviewer(props: {
               <div className={styles["avatar"]}>
                 <ExportAvatar
                   avatar={m.role === "user" ? config.avatar : mask.avatar}
-                  model={m.role === "user" ? undefined : m.model}
+                  model={
+                    m.role === "user"
+                      ? undefined
+                      : props.useDisplayName
+                      ? m.displayName || m.model
+                      : m.model
+                  }
                 />
               </div>
 
@@ -598,6 +711,8 @@ export function ImagePreviewer(props: {
                   content={getMessageTextContent(m)}
                   fontSize={config.fontSize}
                   defaultShow
+                  searchingTime={m.statistic?.searchingLatency}
+                  thinkingTime={m.statistic?.reasoningLatency}
                 />
                 {getMessageImages(m).length == 1 && (
                   <img
@@ -626,6 +741,44 @@ export function ImagePreviewer(props: {
                     ))}
                   </div>
                 )}
+                {getMessageFiles(m).length > 0 && (
+                  <div className={chatStyles["chat-message-item-files"]}>
+                    {getMessageFiles(m).map((file, index) => {
+                      const extension: DefaultExtensionType = file.name
+                        .split(".")
+                        .pop()
+                        ?.toLowerCase() as DefaultExtensionType;
+                      const style = defaultStyles[extension];
+                      return (
+                        <a
+                          // href={file.url}
+                          // target="_blank"
+                          key={index}
+                          className={chatStyles["chat-message-item-file"]}
+                        >
+                          <div
+                            className={
+                              chatStyles["chat-message-item-file-icon"] +
+                              " no-dark"
+                            }
+                          >
+                            <FileIcon {...style} glyphColor="#303030" />
+                          </div>
+                          <div
+                            className={
+                              chatStyles["chat-message-item-file-name"]
+                            }
+                          >
+                            {file.name}{" "}
+                            {file?.size !== undefined
+                              ? `(${file.size}K, ${file.tokenCount}Tokens)`
+                              : `(${file.tokenCount}K)`}
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -638,14 +791,43 @@ export function ImagePreviewer(props: {
 export function MarkdownPreviewer(props: {
   messages: ChatMessage[];
   topic: string;
+  useDisplayName: boolean;
 }) {
   const mdText =
     `# ${props.topic}\n\n` +
     props.messages
       .map((m) => {
-        return m.role === "user"
-          ? `## ${Locale.Export.MessageFromYou}:\n${getMessageTextContent(m)}`
-          : `## ${m.model}:\n${getMessageTextContent(m).trim()}`;
+        const textContent = getMessageTextContent(m);
+        const images = getMessageImages(m);
+        const files = getMessageFiles(m);
+        let messageContent = "";
+        // 添加角色和文本内容
+        messageContent +=
+          m.role === "user"
+            ? `## ${Locale.Export.MessageFromYou}:\n${textContent}`
+            : `## ${m.model}:\n${textContent.trim()}`;
+
+        // 添加图像内容
+        if (images && images.length > 0) {
+          messageContent += "\n\n### 图像附件:\n";
+          images.forEach((image, index) => {
+            messageContent += `\n![图像 ${index + 1}](${image})`;
+          });
+        }
+
+        // 添加文件内容
+        if (files && files.length > 0) {
+          messageContent += "\n\n### 文件附件:\n";
+          files.forEach((file, index) => {
+            const fileInfo =
+              file.size !== undefined
+                ? `(${file.size}K, ${file.tokenCount}Tokens)`
+                : `(${file.tokenCount}Tokens)`;
+            messageContent += `\n- [${file.name}](${file.url}) ${fileInfo}`;
+          });
+        }
+
+        return messageContent;
       })
       .join("\n\n");
 
@@ -673,12 +855,14 @@ export function MarkdownPreviewer(props: {
 export function JsonPreviewer(props: {
   messages: ChatMessage[];
   topic: string;
+  useDisplayName: boolean;
 }) {
   const msgs = {
+    sessionTitle: props.topic.trim(),
     messages: [
       {
         role: "system",
-        content: `${Locale.FineTuned.Sysmessage} ${props.topic}`,
+        content: `${Locale.FineTuned.Sysmessage}`,
       },
       ...props.messages.map((m) => ({
         role: m.role,

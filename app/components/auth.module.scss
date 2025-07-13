@@ -11,13 +11,13 @@
   }
 
   .auth-title {
-    font-size: 24px;
+    font-size: var(--text-2xl);
     font-weight: bold;
     line-height: 2;
   }
 
   .auth-tips {
-    font-size: 14px;
+    font-size: var(--text-sm);
   }
 
   .auth-input {

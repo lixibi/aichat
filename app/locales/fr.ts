@@ -32,7 +32,7 @@ const fr: PartialLocaleType = {
       prev: "Conversation précédente",
       clear: "Effacer le contexte",
       del: "Supprimer la Conversation",
-      search: "Rechercher dans le chat"
+      search: "Rechercher dans le chat",
     },
     InputActions: {
       Stop: "Stop",
@@ -94,12 +94,19 @@ const fr: PartialLocaleType = {
         Action: "Reinitialiser",
         Confirm: "Confirmer la réinitialisation des paramètres?",
       },
-      Clear: {
-        Title: "Supprimer toutes les données",
+      ClearChat: {
+        Title: "Effacer les données de chat",
+        SubTitle: "Effacer toutes les données de chat (sans les paramètres)",
+        Action: "Effacer maintenant",
+        Confirm: "Confirmer l'effacement de toutes les données de chat ?",
+      },
+      ClearALL: {
+        Title: "Effacer toutes les données et les paramètres",
         SubTitle:
-          "Effacer toutes les données, y compris les conversations et les paramètres",
-        Action: "Supprimer",
-        Confirm: "Confirmer la suppression de toutes les données?",
+          "Effacer toutes les données de chat et les paramètres, revenir à l'état initial",
+        Action: "Effacer tout",
+        Confirm:
+          "Confirmer l'effacement de toutes les données de chat et des paramètres ?",
       },
     },
     Lang: {
