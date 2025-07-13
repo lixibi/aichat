@@ -296,7 +296,7 @@ export function SideBar(props: { className?: string }) {
       <SideBarHeader
         title={sidebarTitle}
         subTitle={sidebarSubTitle}
-        logo={<AILogoIcon />}
+        logo={<img src="/logo0.png" alt="Logo" style={{width: "128px", height: "auto"}} />}
         shouldNarrow={shouldNarrow}
       >
         <div className={styles["sidebar-header-bar"]}>
@@ -377,15 +377,6 @@ export function SideBar(props: { className?: string }) {
                   shadow
                 />
               </Link>
-            </div>
-            <div className={styles["sidebar-action"]}>
-              <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
-                <IconButton
-                  aria={Locale.Export.MessageFromChatGPT}
-                  icon={<GithubIcon />}
-                  shadow
-                />
-              </a>
             </div>
             <div className={styles["sidebar-action"]}>
               <Link

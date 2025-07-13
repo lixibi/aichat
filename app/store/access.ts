@@ -65,9 +65,9 @@ const DEFAULT_ACCESS_STATE = {
   iconPosition: "",
 
   // sidebar config
-  sidebarTitle: "",
-  sidebarSubTitle: "",
-  siteTitle: "NextChat",
+  sidebarTitle: "李希宁AI",
+  sidebarSubTitle: "thx nextchat",
+  siteTitle: "李希宁AI",
 
   // model config
   compressModel: "" as ModelType,

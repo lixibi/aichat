@@ -104,9 +104,9 @@ function getApiKey(keys?: string) {
 }
 export const getSidebarConfig = () => {
   return {
-    title: process.env.SIDEBAR_TITLE || "NextChat",
-    subTitle: process.env.SIDEBAR_SUBTITLE || "Build your own AI assistant.",
-    siteTitle: process.env.SITE_TITLE || "NextChat",
+    title: process.env.SIDEBAR_TITLE || "李希宁AI",
+    subTitle: process.env.SIDEBAR_SUBTITLE || "thx nextchat",
+    siteTitle: process.env.SITE_TITLE || "李希宁AI",
   };
 };
 export const getServerSideConfig = () => {
