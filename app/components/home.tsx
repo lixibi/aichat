@@ -33,7 +33,7 @@ import { useAccessStore } from "../store";
 import { identifyDefaultClaudeModel } from "../utils/checkers";
 import { FloatingButton } from "./floating-button";
 import { CustomCssProvider } from "./CustomCssProvider";
-import { WelcomeGuide } from "./welcome-guide";
+import { useSilentAutoImport } from "../hooks/useSilentAutoImport";
 
 export function Loading(props: { noLogo?: boolean }) {
   return (
@@ -241,6 +241,7 @@ export function Home() {
   useSwitchTheme();
   useLoadData();
   useHtmlLang();
+  useSilentAutoImport(); // 静默自动导入
 
   useEffect(() => {
     console.log("[Config] got config from build time", getClientConfig());
@@ -257,7 +258,6 @@ export function Home() {
         <CustomCssProvider />
         <Screen />
         <FloatingButton />
-        <WelcomeGuide />
       </Router>
     </ErrorBoundary>
   );

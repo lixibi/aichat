@@ -13,7 +13,6 @@ export interface CustomProviderState {
   lastUpdateTime?: number;
   migrated?: boolean; // Add a flag to track migration status
   isFirstTime?: boolean; // Track if user is first time using the app
-  hasShownWelcome?: boolean; // Track if welcome guide has been shown
 }
 
 // 3. Define the default/initial state
@@ -22,7 +21,6 @@ export const DEFAULT_CUSTOM_PROVIDER_STATE: CustomProviderState = {
   lastUpdateTime: 0,
   migrated: false,
   isFirstTime: true,
-  hasShownWelcome: false,
 };
 
 // Function to migrate data from localStorage to Zustand store
@@ -112,18 +110,10 @@ export const useCustomProviderStore = createPersistStore(
       return state.isFirstTime && state.providers.length === 0;
     },
 
-    markWelcomeShown: () => {
-      set((state) => ({
-        ...state,
-        hasShownWelcome: true,
-      }));
-    },
-
     markNotFirstTime: () => {
       set((state) => ({
         ...state,
         isFirstTime: false,
-        hasShownWelcome: true,
       }));
     },
 
@@ -139,7 +129,6 @@ export const useCustomProviderStore = createPersistStore(
         providers: processedProviders,
         lastUpdateTime: Date.now(),
         isFirstTime: false,
-        hasShownWelcome: true,
       }));
     },
 
