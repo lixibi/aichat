@@ -8,6 +8,8 @@ console.log("[Next] build with chunk: ", !disableChunk);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Ensure proper trailing slash handling for Vercel
+  trailingSlash: false,
   webpack(config) {
     config.module.rules.push({
       test: /\.svg$/,
@@ -136,9 +138,7 @@ if (mode !== "export") {
       },
     ];
 
-    return {
-      beforeFiles: ret,
-    };
+    return ret;
   };
 }
 
