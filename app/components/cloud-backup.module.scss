@@ -1,0 +1,260 @@
+/* src/cloud-backup.module.scss */
+
+@import "../styles/animation.scss";
+
+.backup-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.backup-header {
+  padding: 8px 12px;
+  background-color: var(--white);
+  border-bottom: var(--border-in-light);
+  flex-shrink: 0;
+  max-height: 50vh; /* 限制最大高度为视口的50% */
+  overflow-y: auto; /* 当内容过多时允许滚动 */
+  position: relative;
+
+  .title {
+    text-align: center;
+    margin-bottom: 10px;
+    font-size: 18px;
+    color: var(--black);
+  }
+  .window-action-button {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+  }
+  .inputGroup {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: bold;
+    font-size: 14px;
+    color: var(--text-color-secondary);
+  }
+
+  .input {
+    flex: 1;
+    width: 100%;
+    min-width: 400px;
+    padding: 6px 10px;
+    border: var(--border-in-light);
+    border-radius: 5px;
+    font-size: 14px;
+    margin-right: 0.2rem;
+    box-sizing: border-box;
+    transition: border-color 0.3s ease;
+    display: block;
+    background-color: var(--white);
+    color: var(--black);
+
+    &:focus {
+      border-color: var(--primary);
+      outline: none;
+    }
+
+    &:disabled {
+      background-color: var(--button-disabled-bg);
+    }
+  }
+
+  .buttonGroup {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.3rem;
+  }
+
+  .button {
+    flex: 1;
+    padding: 10px 20px;
+    margin-bottom: 5px;
+    font-size: 14px;
+    color: var(--white);
+    background-color: var(--primary);
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+
+    &:hover:not(:disabled) {
+      opacity: 0.8;
+    }
+
+    &:disabled {
+      background-color: var(--button-disabled-bg);
+      cursor: not-allowed;
+    }
+  }
+
+  .message {
+    margin-top: 15px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 16px;
+    color: var(--text-color);
+  }
+}
+
+/* 文件列表样式 */
+.file-list-container {
+  flex: 1;
+  padding: 10px;
+  max-height: 55vh;
+  overflow-y: auto;
+  background-color: var(--background-color-secondary);
+
+  // 滚动条样式
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #3298eb #f1f1f1; /* Firefox */
+
+  .fileListContainer::-webkit-scrollbar {
+    width: 16px;
+  }
+
+  .fileListContainer::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 8px;
+  }
+
+  .fileListContainer::-webkit-scrollbar-thumb {
+    background:  #3298eb;
+    border-radius: 8px;
+  }
+
+  .fileListContainer::-webkit-scrollbar-thumb:hover {
+    background: #499ee5;
+  }
+
+  .subtitle {
+    font-size: 18px;
+    color: var(--black);
+    margin-bottom: 18px;
+    text-align: center;
+  }
+
+  .list {
+    list-style: none;
+    padding-bottom: 20px;
+    margin: 0;
+  }
+
+  .listItem {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 10px;
+    border: var(--border-in-light);
+    border-radius: 5px;
+    margin-bottom: 8px;
+    background-color: var(--white);
+    transition: background-color 0.3s ease;
+
+    &:hover {
+      background-color: var(--hover-color);
+    }
+
+    .fileInfo {
+      flex: 2;
+      font-size: 14px;
+      color: var(--text-color-secondary);
+      word-break: break-all;
+    }
+
+    .renameInput {
+      width: 100%;
+      padding: 6px 10px;
+      border: var(--border-in-light);
+      border-radius: 4px;
+      font-size: 13px;
+      box-sizing: border-box;
+      background-color: var(--white);
+      color: var(--black);
+    }
+
+    .fileActions {
+      flex: 3;
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    .actionButton {
+      padding: 6px 10px;
+      font-size: 13px;
+      color: var(--white);
+      background-color: var(--primary);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+
+      &:hover:not(:disabled) {
+        background-color: var(--primary-hover);
+      }
+
+      &:disabled {
+        background-color: var(--button-disabled-bg);
+        cursor: not-allowed;
+      }
+    }
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 600px) {
+  .backup-header {
+    padding: 15px;
+
+    .title {
+      font-size: 20px;
+      margin-bottom: 15px;
+    }
+
+    .inputGroup {
+      flex-direction: column;
+      align-items: stretch;
+      margin-bottom: 15px;
+    }
+
+    .input {
+      width: 100%;
+      margin-bottom: 5px;
+    }
+
+    .buttonGroup {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .button {
+      width: 100%;
+    }
+  }
+
+  .file-list-container {
+    padding: 10px;
+    max-height: 60vh; /* 限制列表区域高度，确保文件可以滚动到底部 */
+
+    .listItem {
+      flex-direction: column;
+      align-items: flex-start;
+
+      .fileActions {
+        justify-content: flex-start;
+        gap: 4px;
+        margin-top: 8px;
+      }
+    }
+  }
+}

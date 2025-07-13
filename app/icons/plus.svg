@@ -1,0 +1,13 @@
+<svg width="26" height="26" xmlns="http://www.w3.org/2000/svg" fill="none">
+ <defs>
+  <linearGradient id="r5" x1="0" y1="0" x2="0" y2="0">
+   <stop stop-color="#e056fd"/>
+   <stop offset="1" stop-color="#e056fd"/>
+  </linearGradient>
+ </defs>
+ <g>
+  <title>Layer 1</title>
+  <rect id="r4" width="26" height="26" rx="90" fill="url(#r5)" stroke-width="0" stroke-opacity="100%" paint-order="stroke" stroke="#FFFFFF"/>
+  <text style="cursor: move;" x="12" y="12" font-size="10" font-weight="600" fill="#7fded3" font-family="math" text-anchor="middle" dy="0.35em" id="svg_1">plus</text>
+ </g>
+</svg>
