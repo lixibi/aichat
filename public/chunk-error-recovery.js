@@ -1,133 +1,164 @@
-// ULTIMATE iPad chunk loading error recovery - zero tolerance approach
+// Enhanced iPad chunk loading error recovery with white screen prevention
 (function() {
   // Detect if we're on iPad/iOS
   const isIPad = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   
-  console.log('[ULTIMATE Recovery] Device detected:', isIPad ? 'iPad/iOS' : 'Other', navigator.userAgent);
+  console.log('[Recovery] Device detected:', isIPad ? 'iPad/iOS' : 'Other', navigator.userAgent);
   
   if (isIPad) {
-    console.log('[ULTIMATE Recovery] iPad detected - implementing zero tolerance chunk error recovery');
+    console.log('[Recovery] iPad detected - implementing enhanced error recovery');
     
-    // Disable all caching for iPad immediately
+    // Track reload attempts to prevent infinite loops
+    const RELOAD_COUNT_KEY = '_ipad_reload_count';
+    const MAX_RELOADS = 3;
+    const RELOAD_TIMEOUT = 10000; // 10 seconds
+    
+    let reloadCount = parseInt(sessionStorage.getItem(RELOAD_COUNT_KEY) || '0');
+    
+    // Reset reload count after timeout
+    setTimeout(() => {
+      sessionStorage.removeItem(RELOAD_COUNT_KEY);
+    }, RELOAD_TIMEOUT);
+    
+    // If too many reloads, stop trying and show error message
+    if (reloadCount >= MAX_RELOADS) {
+      console.warn('[Recovery] Too many reloads, stopping recovery to prevent white screen');
+      
+      // Show basic error message if page is blank
+      setTimeout(() => {
+        if (!document.body.innerHTML.trim() || document.body.innerHTML.length < 100) {
+          document.body.innerHTML = `
+            <div style="padding: 20px; font-family: Arial, sans-serif; text-align: center;">
+              <h2>李希宁AI</h2>
+              <p>iPad loading issue detected. Please:</p>
+              <ol style="text-align: left; max-width: 300px; margin: 0 auto;">
+                <li>Clear browser cache and cookies</li>
+                <li>Close all browser tabs</li>
+                <li>Restart your browser</li>
+                <li><a href="javascript:location.reload(true)">Try refreshing again</a></li>
+              </ol>
+            </div>
+          `;
+        }
+      }, 3000);
+      return;
+    }
+    
+    // Clear caches on first load
     if ('caches' in window) {
       caches.keys().then(function(cacheNames) {
         cacheNames.forEach(function(cacheName) {
           caches.delete(cacheName);
-          console.log('[ULTIMATE Recovery] Deleted cache:', cacheName);
+          console.log('[Recovery] Deleted cache:', cacheName);
         });
       });
     }
     
-    // Override fetch to always use no-cache for iPad
+    // Override fetch for no-cache
     const originalFetch = window.fetch;
     window.fetch = function(input, init = {}) {
-      const headers = {
-        ...init.headers,
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      };
-      
       return originalFetch(input, {
         ...init,
         cache: 'no-cache',
-        headers
+        headers: {
+          ...init.headers,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
       });
     };
     
-    // Immediate error recovery for any chunk errors
-    const immediateReload = function() {
-      console.log('[ULTIMATE Recovery] Immediate reload triggered for iPad');
-      const url = new URL(window.location);
-      url.searchParams.set('_ipad_refresh', Date.now());
-      window.location.replace(url.toString());
+    // Smart reload function with throttling
+    const smartReload = function(reason) {
+      reloadCount++;
+      sessionStorage.setItem(RELOAD_COUNT_KEY, reloadCount.toString());
+      
+      console.log(`[Recovery] Smart reload triggered (${reloadCount}/${MAX_RELOADS}):`, reason);
+      
+      if (reloadCount < MAX_RELOADS) {
+        const url = new URL(window.location);
+        url.searchParams.set('_recovery', Date.now());
+        setTimeout(() => {
+          window.location.replace(url.toString());
+        }, 1000); // Give page time to show error
+      }
     };
     
-    // Intercept ALL possible error sources
+    // Error monitoring with smart filtering
     window.addEventListener('error', function(event) {
       const errorMessage = event.message || '';
-      console.log('[ULTIMATE Recovery] Error detected:', errorMessage);
       
-      // Any error related to loading or chunks triggers immediate reload
-      if (/chunk|loading|import|script|network/i.test(errorMessage)) {
-        console.log('[ULTIMATE Recovery] Chunk-related error detected, immediate reload');
-        setTimeout(immediateReload, 100);
+      // Only trigger reload for actual chunk errors, not all errors
+      if (/loading chunk \d+ failed|ChunkLoadError|Failed to fetch dynamically imported module/i.test(errorMessage)) {
+        console.log('[Recovery] Chunk error detected:', errorMessage);
+        smartReload('chunk_error');
       }
     }, true);
     
-    // Catch unhandled promise rejections
+    // Promise rejection handling
     window.addEventListener('unhandledrejection', function(event) {
       const errorMessage = String(event.reason);
-      console.log('[ULTIMATE Recovery] Promise rejection:', errorMessage);
       
-      if (/chunk|loading|import|script|network/i.test(errorMessage)) {
-        console.log('[ULTIMATE Recovery] Chunk-related rejection, immediate reload');
-        setTimeout(immediateReload, 100);
+      if (/loading chunk \d+ failed|ChunkLoadError|Failed to fetch dynamically imported module/i.test(errorMessage)) {
+        console.log('[Recovery] Chunk promise rejection:', errorMessage);
+        event.preventDefault();
+        smartReload('chunk_rejection');
       }
     });
     
-    // Override all dynamic import functions to catch errors
-    const originalImport = window.__webpack_require__;
-    if (originalImport) {
-      window.__webpack_require__ = function(...args) {
-        try {
-          return originalImport.apply(this, args);
-        } catch (error) {
-          console.log('[ULTIMATE Recovery] Webpack require error:', error);
-          setTimeout(immediateReload, 100);
-          throw error;
-        }
-      };
-    }
-    
-    // Monitor for specific chunk loading failures
+    // Monitor for script loading failures
     const observer = new MutationObserver(function(mutations) {
       mutations.forEach(function(mutation) {
         mutation.addedNodes.forEach(function(node) {
           if (node.tagName === 'SCRIPT' && node.src && node.src.includes('chunks')) {
             node.addEventListener('error', function() {
-              console.log('[ULTIMATE Recovery] Script chunk failed to load:', node.src);
-              setTimeout(immediateReload, 50);
+              console.log('[Recovery] Script chunk failed:', node.src);
+              smartReload('script_load_error');
             });
           }
         });
       });
     });
     
-    observer.observe(document.head, { childList: true });
+    if (document.head) {
+      observer.observe(document.head, { childList: true });
+    }
     
-    // Periodic health check for iPad
+    // Health check with better logic
     let healthCheckCount = 0;
     const healthCheck = setInterval(function() {
       healthCheckCount++;
       
-      // Check if essential libraries are available
-      if (!window.React || !window.ReactDOM || document.querySelector('.error-boundary')) {
-        console.log('[ULTIMATE Recovery] Health check failed, triggering reload');
+      // Check if page has reasonable content
+      const hasContent = document.body && document.body.innerHTML.length > 100;
+      const hasReact = window.React || document.querySelector('[data-reactroot]') || document.querySelector('#__next');
+      
+      if (healthCheckCount > 15 && !hasContent && !hasReact) {
+        console.log('[Recovery] Health check failed - no content detected');
         clearInterval(healthCheck);
-        setTimeout(immediateReload, 100);
+        smartReload('health_check_failed');
         return;
       }
       
-      // Stop health check after 30 seconds if everything is fine
-      if (healthCheckCount > 30) {
+      // Stop health check after 30 seconds if everything looks good
+      if (healthCheckCount > 30 || (hasContent && hasReact)) {
         clearInterval(healthCheck);
-        console.log('[ULTIMATE Recovery] Health check completed successfully');
+        console.log('[Recovery] Health check completed successfully');
       }
     }, 1000);
     
-    console.log('[ULTIMATE Recovery] Ultimate iPad recovery system activated');
+    console.log('[Recovery] Enhanced iPad recovery system activated');
     
   } else {
-    // Original recovery system for non-iPad devices (simplified)
-    console.log('[ULTIMATE Recovery] Standard recovery system for non-iPad device');
+    // Simplified recovery for non-iPad devices
+    console.log('[Recovery] Standard recovery for non-iPad device');
     
     window.addEventListener('error', function(event) {
       const errorMessage = event.message || '';
-      if (/chunk.*failed|ChunkLoadError/i.test(errorMessage)) {
-        console.log('[ULTIMATE Recovery] Chunk error on non-iPad, standard recovery');
-        setTimeout(() => window.location.reload(), 1000);
+      if (/loading chunk \d+ failed|ChunkLoadError/i.test(errorMessage)) {
+        console.log('[Recovery] Chunk error on non-iPad, reloading');
+        setTimeout(() => window.location.reload(), 2000);
       }
     });
   }

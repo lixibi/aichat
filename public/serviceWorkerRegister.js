@@ -1,4 +1,4 @@
-// Enhanced service worker registration with iPad detection and prevention
+// Enhanced service worker registration with iPad-friendly approach
 (function() {
   // Detect if we're on iPad/iOS
   const isIPad = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
@@ -6,33 +6,41 @@
   
   console.log('[ServiceWorker] Device detected:', isIPad ? 'iPad/iOS' : 'Other');
   
-  // For iPad, completely disable service worker to prevent chunk errors
+  // For iPad, be more conservative with service worker handling
   if (isIPad) {
-    console.log('[ServiceWorker] iPad detected, disabling service worker to prevent chunk errors');
+    console.log('[ServiceWorker] iPad detected, using conservative approach');
     
-    // Unregister any existing service workers on iPad
+    // Only unregister existing service workers if they exist, don't prevent normal loading
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        registrations.forEach(function(registration) {
-          console.log('[ServiceWorker] Unregistering existing service worker for iPad');
-          registration.unregister();
-        });
+        if (registrations.length > 0) {
+          registrations.forEach(function(registration) {
+            console.log('[ServiceWorker] Unregistering existing service worker for iPad');
+            registration.unregister();
+          });
+        }
+      }).catch(function(error) {
+        console.log('[ServiceWorker] Error checking registrations:', error);
       });
     }
     
-    // Clear all caches on iPad
+    // Clear problematic caches, but don't block page loading
     if ('caches' in window) {
       caches.keys().then(function(cacheNames) {
-        return Promise.all(
-          cacheNames.map(function(cacheName) {
-            console.log('[ServiceWorker] Deleting cache for iPad:', cacheName);
-            return caches.delete(cacheName);
-          })
-        );
+        cacheNames.forEach(function(cacheName) {
+          if (cacheName.includes('chunk') || cacheName.includes('static')) {
+            caches.delete(cacheName);
+            console.log('[ServiceWorker] Deleted problematic cache for iPad:', cacheName);
+          }
+        });
+      }).catch(function(error) {
+        console.log('[ServiceWorker] Error clearing caches:', error);
       });
     }
     
-    return; // Exit early for iPad
+    // Don't register new service worker on iPad to avoid conflicts
+    console.log('[ServiceWorker] Skipping service worker registration for iPad');
+    return;
   }
   
   // Original service worker registration for non-iPad devices
