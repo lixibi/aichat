@@ -48,6 +48,7 @@ export default function RootLayout({
           crossOrigin="use-credentials"
         ></link>
         <script src="/serviceWorkerRegister.js" defer></script>
+        <script src="/chunk-error-recovery.js"></script>
       </head>
       <body>
         {children}

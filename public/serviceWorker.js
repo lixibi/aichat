@@ -1,5 +1,5 @@
-const LIXINING_AI_CACHE = "lixining-ai-cache-v2";
-const LIXINING_AI_FILE_CACHE = "lixining-ai-file-v2";
+const LIXINING_AI_CACHE = "lixining-ai-cache-v3";
+const LIXINING_AI_FILE_CACHE = "lixining-ai-file-v3";
 let a="useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";let nanoid=(e=21)=>{let t="",r=crypto.getRandomValues(new Uint8Array(e));for(let n=0;n<e;n++)t+=a[63&r[n]];return t};
 
 self.addEventListener("activate", function (event) {
@@ -15,17 +15,31 @@ self.addEventListener("activate", function (event) {
           }
         })
       );
+    }).then(() => {
+      // Force claim all clients to ensure updated SW takes control
+      return self.clients.claim();
     })
   );
 });
 
 self.addEventListener("install", function (event) {
-  self.skipWaiting();  // enable new version
+  console.log("ServiceWorker installing...");
+  self.skipWaiting();  // enable new version immediately
   event.waitUntil(
     caches.open(LIXINING_AI_CACHE).then(function (cache) {
       return cache.addAll([]);
     }),
   );
+});
+
+// Add error handling for chunk loading errors
+self.addEventListener('message', function(event) {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data && event.data.type === 'CLIENTS_CLAIM') {
+    self.clients.claim();
+  }
 });
 
 function jsonify(data) {
@@ -61,6 +75,8 @@ async function remove(request, url) {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
+  
+  // Handle API cache requests
   if (/^\/api\/cache\//.test(url.pathname)) {
     if ('GET' === e.request.method) {
       e.respondWith(caches.match(e.request))
@@ -71,5 +87,21 @@ self.addEventListener("fetch", (e) => {
     if ('DELETE' === e.request.method) {
       e.respondWith(remove(e.request, url))
     }
+    return;
+  }
+  
+  // Handle chunk loading errors by bypassing cache for JS files
+  if (url.pathname.includes('/_next/static/chunks/') && e.request.method === 'GET') {
+    e.respondWith(
+      fetch(e.request, { cache: 'no-cache' }).catch(() => {
+        // If fetch fails, try to reload the page
+        console.warn('Chunk loading failed, will reload page');
+        return new Response('', { 
+          status: 302, 
+          headers: { 'Location': '/' } 
+        });
+      })
+    );
+    return;
   }
 });
