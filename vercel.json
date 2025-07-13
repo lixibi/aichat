@@ -1,10 +1,5 @@
 {
     "github": {
         "silent": true
-    },
-    "functions": {
-        "app/api/*/route.ts": {
-            "runtime": "nodejs18.x"
-        }
     }
 }
