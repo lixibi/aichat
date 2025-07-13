@@ -1,0 +1,152 @@
+.welcome-content {
+  padding: 20px;
+  max-width: 500px;
+  min-width: 400px;
+}
+
+.welcome-text {
+  margin-bottom: 24px;
+}
+
+.welcome-text h3 {
+  margin: 0 0 16px 0;
+  color: var(--primary);
+  font-size: 18px;
+}
+
+.welcome-text p {
+  margin: 0 0 12px 0;
+  color: var(--black);
+  line-height: 1.5;
+}
+
+.guide-steps {
+  margin: 20px 0;
+  border-left: 2px solid var(--border-color);
+  padding-left: 0;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  position: relative;
+  padding-left: 40px;
+}
+
+.step-number {
+  position: absolute;
+  left: -12px;
+  top: 2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.step-content {
+  flex: 1;
+}
+
+.step-content strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--black);
+  font-size: 14px;
+}
+
+.step-content p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--second);
+  line-height: 1.4;
+}
+
+.security-note {
+  background: #f0f9ff;
+  border: 1px solid #0ea5e9;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 16px 0;
+}
+
+.security-note strong {
+  color: #0369a1;
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.security-note p {
+  margin: 0;
+  font-size: 12px;
+  color: #0369a1;
+  line-height: 1.4;
+}
+
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.primary-btn {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background-color 0.2s;
+}
+
+.primary-btn:hover {
+  background: var(--primary-hover);
+}
+
+.secondary-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.text-btn {
+  background: none;
+  border: none;
+  color: var(--second);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.text-btn:hover {
+  background: var(--hover-color);
+  color: var(--black);
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .security-note {
+    background: #1e3a8a;
+    border-color: #3b82f6;
+  }
+
+  .security-note strong,
+  .security-note p {
+    color: #93c5fd;
+  }
+}

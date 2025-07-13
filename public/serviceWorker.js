@@ -1,15 +1,28 @@
-const CHATGPT_NEXT_WEB_CACHE = "chatgpt-next-web-cache";
-const CHATGPT_NEXT_WEB_FILE_CACHE = "chatgpt-next-web-file";
+const LIXINING_AI_CACHE = "lixining-ai-cache-v2";
+const LIXINING_AI_FILE_CACHE = "lixining-ai-file-v2";
 let a="useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";let nanoid=(e=21)=>{let t="",r=crypto.getRandomValues(new Uint8Array(e));for(let n=0;n<e;n++)t+=a[63&r[n]];return t};
 
 self.addEventListener("activate", function (event) {
   console.log("ServiceWorker activated.");
+  // Clean up old caches
+  event.waitUntil(
+    caches.keys().then(function(cacheNames) {
+      return Promise.all(
+        cacheNames.map(function(cacheName) {
+          if (cacheName !== LIXINING_AI_CACHE && cacheName !== LIXINING_AI_FILE_CACHE) {
+            console.log('Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
 });
 
 self.addEventListener("install", function (event) {
   self.skipWaiting();  // enable new version
   event.waitUntil(
-    caches.open(CHATGPT_NEXT_WEB_CACHE).then(function (cache) {
+    caches.open(LIXINING_AI_CACHE).then(function (cache) {
       return cache.addAll([]);
     }),
   );
@@ -28,7 +41,7 @@ async function upload(request, url) {
   }
   const fileUrl = `${url.origin}/api/cache/${nanoid()}.${ext}`
   // console.debug('file', file, fileUrl, request)
-  const cache = await caches.open(CHATGPT_NEXT_WEB_FILE_CACHE)
+  const cache = await caches.open(LIXINING_AI_FILE_CACHE)
   await cache.put(new Request(fileUrl), new Response(file, {
     headers: {
       'content-type': file.type,
@@ -41,7 +54,7 @@ async function upload(request, url) {
 }
 
 async function remove(request, url) {
-  const cache = await caches.open(CHATGPT_NEXT_WEB_FILE_CACHE)
+  const cache = await caches.open(LIXINING_AI_FILE_CACHE)
   const res = await cache.delete(request.url)
   return jsonify({ code: 0 })
 }

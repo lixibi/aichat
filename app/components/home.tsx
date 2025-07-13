@@ -33,6 +33,7 @@ import { useAccessStore } from "../store";
 import { identifyDefaultClaudeModel } from "../utils/checkers";
 import { FloatingButton } from "./floating-button";
 import { CustomCssProvider } from "./CustomCssProvider";
+import { WelcomeGuide } from "./welcome-guide";
 
 export function Loading(props: { noLogo?: boolean }) {
   return (
@@ -256,6 +257,7 @@ export function Home() {
         <CustomCssProvider />
         <Screen />
         <FloatingButton />
+        <WelcomeGuide />
       </Router>
     </ErrorBoundary>
   );

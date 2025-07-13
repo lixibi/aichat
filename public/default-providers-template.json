@@ -1,0 +1,34 @@
+[
+  {
+    "id": "provider-template-1",
+    "name": "T佬",
+    "apiKey": "YOUR_API_KEY_HERE",
+    "baseUrl": "https://tbai.xin",
+    "type": "openai",
+    "models": [
+      {
+        "name": "deepseek-r1",
+        "available": true,
+        "isDefault": false,
+        "provider": {
+          "id": "OpenAI",
+          "providerName": "OpenAI",
+          "providerType": "OpenAI"
+        }
+      },
+      {
+        "name": "gpt-4o",
+        "available": true,
+        "isDefault": true,
+        "provider": {
+          "id": "OpenAI",
+          "providerName": "OpenAI",
+          "providerType": "OpenAI"
+        }
+      }
+    ],
+    "balance": "",
+    "lastTest": "",
+    "description": "T佬提供的OpenAI兼容服务"
+  }
+]

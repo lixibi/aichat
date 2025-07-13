@@ -12,6 +12,8 @@ export interface CustomProviderState {
   providers: CustomProviderData[];
   lastUpdateTime?: number;
   migrated?: boolean; // Add a flag to track migration status
+  isFirstTime?: boolean; // Track if user is first time using the app
+  hasShownWelcome?: boolean; // Track if welcome guide has been shown
 }
 
 // 3. Define the default/initial state
@@ -19,6 +21,8 @@ export const DEFAULT_CUSTOM_PROVIDER_STATE: CustomProviderState = {
   providers: [],
   lastUpdateTime: 0,
   migrated: false,
+  isFirstTime: true,
+  hasShownWelcome: false,
 };
 
 // Function to migrate data from localStorage to Zustand store
@@ -99,6 +103,43 @@ export const useCustomProviderStore = createPersistStore(
       set((state) => ({
         providers: state.providers.filter((p) => p.id !== id),
         lastUpdateTime: Date.now(),
+      }));
+    },
+
+    // --- First-time user methods ---
+    isFirstTimeUser: () => {
+      const state = get();
+      return state.isFirstTime && state.providers.length === 0;
+    },
+
+    markWelcomeShown: () => {
+      set((state) => ({
+        ...state,
+        hasShownWelcome: true,
+      }));
+    },
+
+    markNotFirstTime: () => {
+      set((state) => ({
+        ...state,
+        isFirstTime: false,
+        hasShownWelcome: true,
+      }));
+    },
+
+    // Import providers from template (removes template placeholders)
+    importFromTemplate: (templateProviders: CustomProviderData[]) => {
+      const processedProviders = templateProviders.map((provider) => ({
+        ...provider,
+        id: `provider-${Date.now()}-${nanoid(7)}`,
+      }));
+      
+      set((state) => ({
+        ...state,
+        providers: processedProviders,
+        lastUpdateTime: Date.now(),
+        isFirstTime: false,
+        hasShownWelcome: true,
       }));
     },
 
