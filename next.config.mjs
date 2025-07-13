@@ -18,6 +18,37 @@ const nextConfig = {
       config.plugins.push(
         new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }),
       );
+    } else {
+      // Optimize chunk splitting for better mobile performance
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          ...config.optimization.splitChunks,
+          chunks: 'all',
+          minSize: 20000,
+          maxSize: 244000, // Smaller chunks for better mobile loading
+          cacheGroups: {
+            default: {
+              minChunks: 2,
+              priority: -20,
+              reuseExistingChunk: true,
+            },
+            vendor: {
+              test: /[\\/]node_modules[\\/]/,
+              name: 'vendors',
+              priority: -10,
+              chunks: 'all',
+              maxSize: 244000,
+            },
+            react: {
+              test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
+              name: 'react',
+              priority: 20,
+              chunks: 'all',
+            },
+          },
+        },
+      };
     }
 
     config.resolve.fallback = {
@@ -32,6 +63,20 @@ const nextConfig = {
   },
   experimental: {
     forceSwcTransforms: true,
+  },
+  // Add headers for better caching control
+  async headers() {
+    return [
+      {
+        source: '/_next/static/chunks/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
   },
 };
 
