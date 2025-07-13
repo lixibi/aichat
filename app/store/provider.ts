@@ -12,6 +12,7 @@ export interface CustomProviderState {
   providers: CustomProviderData[];
   lastUpdateTime?: number;
   migrated?: boolean; // Add a flag to track migration status
+  prebuiltLoaded?: boolean; // Flag to track if prebuilt providers were loaded
 }
 
 // 3. Define the default/initial state
@@ -19,6 +20,60 @@ export const DEFAULT_CUSTOM_PROVIDER_STATE: CustomProviderState = {
   providers: [],
   lastUpdateTime: 0,
   migrated: false,
+  prebuiltLoaded: false,
+};
+
+// Function to process provider data and replace environment variable placeholders
+const processProviderConfig = (providers: CustomProviderData[]): CustomProviderData[] => {
+  return providers.map(provider => {
+    const processed = { ...provider };
+    
+    // Handle apiKey environment variables
+    if (typeof processed.apiKey === 'string') {
+      if (processed.apiKey === 'HEBEOPENAI' && typeof window !== 'undefined') {
+        // In browser, we can't access process.env directly, so we'll keep the placeholder
+        // The actual replacement will happen during build time
+      } else if (processed.apiKey === 'HEBEDEEP' && typeof window !== 'undefined') {
+        // Same for HEBEDEEP
+      }
+    }
+    
+    // Handle enableKeyList environment variables
+    if (typeof processed.enableKeyList === 'string') {
+      if (processed.enableKeyList === 'HEBEOPENAI' && typeof window !== 'undefined') {
+        // Keep placeholder for build-time replacement
+      } else if (processed.enableKeyList === 'HEBEDEEP' && typeof window !== 'undefined') {
+        // Keep placeholder for build-time replacement
+      }
+    }
+    
+    return processed;
+  });
+};
+
+// Function to load prebuilt providers (generated at build time)
+const loadPrebuiltProviders = async (): Promise<CustomProviderData[]> => {
+  try {
+    // Try to import the generated config first
+    try {
+      const { PREBUILT_PROVIDERS } = await import("../config/prebuilt-providers");
+      console.log("[Provider Store] Loaded prebuilt providers from build config");
+      return processProviderConfig(PREBUILT_PROVIDERS || []);
+    } catch (importError) {
+      // Fallback to fetching from public directory
+      console.log("[Provider Store] Build config not found, trying public API...");
+      const response = await fetch("/providers-config.json");
+      if (response.ok) {
+        const providers = await response.json();
+        console.log("[Provider Store] Loaded prebuilt providers from public API");
+        return processProviderConfig(Array.isArray(providers) ? providers : []);
+      }
+    }
+    return [];
+  } catch (error) {
+    console.warn("[Provider Store] Could not load prebuilt providers:", error);
+    return [];
+  }
 };
 
 // Function to migrate data from localStorage to Zustand store
@@ -117,6 +172,31 @@ export const useCustomProviderStore = createPersistStore(
         // safeLocalStorage().removeItem(StoreKey.CustomProvider);
       }
     },
+
+    // Load prebuilt providers if not already loaded
+    loadPrebuiltProvidersIfNeeded: async () => {
+      const state = get();
+      if (!state.prebuiltLoaded && state.providers.length === 0) {
+        console.log("[Provider Store] Loading prebuilt providers...");
+        try {
+          const prebuiltProviders = await loadPrebuiltProviders();
+          if (prebuiltProviders.length > 0) {
+            set((state) => ({
+              ...state,
+              providers: prebuiltProviders,
+              prebuiltLoaded: true,
+              lastUpdateTime: Date.now(),
+            }));
+            console.log(`[Provider Store] Loaded ${prebuiltProviders.length} prebuilt providers`);
+          } else {
+            set((state) => ({ ...state, prebuiltLoaded: true }));
+          }
+        } catch (error) {
+          console.error("[Provider Store] Failed to load prebuilt providers:", error);
+          set((state) => ({ ...state, prebuiltLoaded: true }));
+        }
+      }
+    },
   }),
   {
     name: StoreKey.CustomProvider, // Use the same StoreKey as in your component
@@ -138,18 +218,32 @@ export const useCustomProviderStore = createPersistStore(
       return (rehydratedState, error) => {
         if (error) {
           console.error("Error rehydrating CustomProvider store:", error);
-        } else if (rehydratedState && !rehydratedState.migrated) {
-          // If we still need to migrate after rehydration, do it now
+        } else if (rehydratedState) {
           const store = useCustomProviderStore.getState();
-          store.migrateDataIfNeeded();
+          
+          // Handle migration if needed
+          if (!rehydratedState.migrated) {
+            store.migrateDataIfNeeded();
+          }
+          
+          // Load prebuilt providers if needed
+          setTimeout(() => {
+            store.loadPrebuiltProvidersIfNeeded();
+          }, 100); // Small delay to ensure store is fully initialized
         }
       };
     },
   },
 );
 
-// Initialize migration when the store is first created
-useCustomProviderStore.getState().migrateDataIfNeeded();
+// Initialize migration and prebuilt providers when the store is first created
+const store = useCustomProviderStore.getState();
+store.migrateDataIfNeeded();
+
+// Initialize prebuilt providers after a short delay to ensure everything is loaded
+setTimeout(() => {
+  store.loadPrebuiltProvidersIfNeeded();
+}, 200);
 
 // Helper to get non-function fields, similar to sync.ts
 // (Can also be imported from sync.ts if you export it from there)
