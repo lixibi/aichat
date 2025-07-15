@@ -37,7 +37,7 @@ function encryptProviderConfig(data) {
 
 // 主执行函数
 async function main() {
-  const inputFile = path.join(__dirname, '../public/Providers-2025_7_1318_00_54.json');
+  const inputFile = path.join(__dirname, '../public/Providers-2025_7_15 14_07_51.json');
   const outputFile = path.join(__dirname, '../public/default-providers-encrypted.dat');
   
   try {
