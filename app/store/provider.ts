@@ -13,6 +13,7 @@ export interface CustomProviderState {
   lastUpdateTime?: number;
   migrated?: boolean; // Add a flag to track migration status
   isFirstTime?: boolean; // Track if user is first time using the app
+  hasAutoImported?: boolean; // Track if auto import has been completed
 }
 
 // 3. Define the default/initial state
@@ -21,6 +22,7 @@ export const DEFAULT_CUSTOM_PROVIDER_STATE: CustomProviderState = {
   lastUpdateTime: 0,
   migrated: false,
   isFirstTime: true,
+  hasAutoImported: false,
 };
 
 // Function to migrate data from localStorage to Zustand store
@@ -107,13 +109,20 @@ export const useCustomProviderStore = createPersistStore(
     // --- First-time user methods ---
     isFirstTimeUser: () => {
       const state = get();
-      return state.isFirstTime && state.providers.length === 0;
+      return state.isFirstTime && state.providers.length === 0 && !state.hasAutoImported;
+    },
+
+    // Check if auto import is needed (prevents repeated imports)
+    needsAutoImport: () => {
+      const state = get();
+      return state.isFirstTime && state.providers.length === 0 && !state.hasAutoImported;
     },
 
     markNotFirstTime: () => {
       set((state) => ({
         ...state,
         isFirstTime: false,
+        hasAutoImported: true, // Also mark as auto imported when manually setting not first time
       }));
     },
 
@@ -129,6 +138,7 @@ export const useCustomProviderStore = createPersistStore(
         providers: processedProviders,
         lastUpdateTime: Date.now(),
         isFirstTime: false,
+        hasAutoImported: true, // Mark as auto imported
       }));
     },
 
