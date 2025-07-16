@@ -821,63 +821,6 @@ function R_MarkDownContent(props: {
 
 export const MarkdownContent = React.memo(R_MarkDownContent);
 
-function preprocessContent(content: string): string {
-  const lines = content.split("\n");
-  let inCodeBlock = false;
-  let codeBlockLines: string[] = [];
-  let result: string[] = [];
-  let hasLanguageTag = false; // 标记当前代码块是否有语言标注
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.trim().startsWith("```")) {
-      if (!inCodeBlock) {
-        // 开始新的代码块
-        inCodeBlock = true;
-        codeBlockLines = [];
-        hasLanguageTag = line.trim().length > 3;
-
-        if (hasLanguageTag) {
-          // 有语言标注，直接添加这一行
-          result.push(line);
-        }
-        // 无语言标注时不添加这一行，等待语言检测
-      } else {
-        // 代码块结束
-        inCodeBlock = false;
-        if (!hasLanguageTag && codeBlockLines.length > 0) {
-          // 只有在没有语言标注时才进行语言检测
-          result.push("```");
-          result.push(...codeBlockLines);
-        }
-        result.push(line); // 添加结束标记
-      }
-    } else if (inCodeBlock) {
-      if (hasLanguageTag) {
-        // 有语言标注的代码块直接添加内容
-        result.push(line);
-      } else {
-        // 无语言标注的代���块先收集内容
-        codeBlockLines.push(line);
-      }
-    } else {
-      // 非代码块内容直接添加
-      result.push(line);
-    }
-  }
-
-  // 处理未闭合的代码块
-  if (inCodeBlock && !hasLanguageTag && codeBlockLines.length > 0) {
-    console.warn("Unclosed code block detected");
-    result.push("```");
-    result.push(...codeBlockLines);
-    result.push("```");
-  }
-
-  return result.join("\n");
-}
-
 export function Markdown(
   props: {
     content: string;
@@ -891,16 +834,6 @@ export function Markdown(
   } & React.DOMAttributes<HTMLDivElement>,
 ) {
   const mdRef = useRef<HTMLDivElement>(null);
-
-  // 使用 useMemo 缓存处理结果
-  const processedContent = useMemo(() => {
-    // 只在 key 为 "done" 时进行语言检测
-    if (!props.status) {
-      return preprocessContent(props.content);
-    }
-    // 其他情况直接返回原始内容
-    return props.content;
-  }, [props.content, props.status]);
 
   return (
     <div
@@ -917,7 +850,7 @@ export function Markdown(
         <LoadingIcon />
       ) : (
         <MarkdownContent
-          content={processedContent}
+          content={props.content}
           searchingTime={props.searchingTime}
           thinkingTime={props.thinkingTime}
           fontSize={props.fontSize}
