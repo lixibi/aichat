@@ -702,27 +702,6 @@ function formatThinkText(
   return { thinkText: "", remainText: text };
 }
 
-function tryWrapHtmlCode(text: string) {
-  // try add wrap html code (fixed: html codeblock include 2 newline)
-  // ignore embed codeblock
-  if (text.includes("```")) {
-    return text;
-  }
-  return text
-    .replace(
-      /([`]*?)(\w*?)([\n\r]*?)(<!DOCTYPE html>)/g,
-      (match, quoteStart, lang, newLine, doctype) => {
-        return !quoteStart ? "\n```html\n" + doctype : match;
-      },
-    )
-    .replace(
-      /(<\/body>)([\r\n\s]*?)(<\/html>)([\n\r]*)([`]*)([\n\r]*?)/g,
-      (match, bodyEnd, space, htmlEnd, newLine, quoteEnd) => {
-        return !quoteEnd ? bodyEnd + space + htmlEnd + "\n```\n" : match;
-      },
-    );
-}
-
 function ImagePreview({ src }: { src: string }) {
   const handleClick = () => {
     showImageModal(src); // 使用现有的 showImageModal 函数显示图片
@@ -768,8 +747,8 @@ function R_MarkDownContent(props: {
       props.thinkingTime,
     );
     const content = searchText + thinkText + remainText;
-    return tryWrapHtmlCode(content);
-  }, [props.content]);
+    return content;
+  }, [props.content, props.searchingTime, props.thinkingTime]);
 
   return (
     <ReactMarkdown
