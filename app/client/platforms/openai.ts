@@ -590,6 +590,9 @@ export class ChatGPTApi implements LLMApi {
                   citations: string[] | null; // 兼容 openRouter 字段
                 };
               }>;
+              if (!choices || choices.length === 0) {
+                return;
+              }
               const reasoning =
                 choices[0]?.delta?.reasoning_content ||
                 choices[0]?.delta?.reasoning;
@@ -630,7 +633,7 @@ export class ChatGPTApi implements LLMApi {
                   startRequestTime -
                   firstReplyLatency -
                   searchLatency;
-              } else if (content && content.length > 0) {
+              } else if (content !== null && content !== undefined) {
                 // 先接收 content，再处理各种计时和状态标记
                 if (
                   isInThinking &&
