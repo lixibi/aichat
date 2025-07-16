@@ -821,40 +821,6 @@ function R_MarkDownContent(props: {
 
 export const MarkdownContent = React.memo(R_MarkDownContent);
 
-function detectCodeLanguage(code: string): string {
-  try {
-    const result = hljs.highlightAuto(code, [
-      "python",
-      "java",
-      "c",
-      "cpp",
-      "javascript",
-      "typescript",
-      "go",
-      "rust",
-      "html",
-      "css",
-      "sql",
-      "bash",
-      "json",
-      "yaml",
-      "xml",
-      "r",
-      "php",
-      "ruby",
-      "swift",
-      "kotlin",
-      "shell",
-      "perl",
-      "haskell",
-      "matlab",
-    ]);
-    return result.language || "text";
-  } catch (e) {
-    console.warn("Language detection failed:", e);
-    return "text";
-  }
-}
 function preprocessContent(content: string): string {
   const lines = content.split("\n");
   let inCodeBlock = false;
@@ -882,8 +848,7 @@ function preprocessContent(content: string): string {
         inCodeBlock = false;
         if (!hasLanguageTag && codeBlockLines.length > 0) {
           // 只有在没有语言标注时才进行语言检测
-          const detectedLang = detectCodeLanguage(codeBlockLines.join("\n"));
-          result.push("```" + detectedLang);
+          result.push("```");
           result.push(...codeBlockLines);
         }
         result.push(line); // 添加结束标记
@@ -893,7 +858,7 @@ function preprocessContent(content: string): string {
         // 有语言标注的代码块直接添加内容
         result.push(line);
       } else {
-        // 无语言标注的代码块先收集内容
+        // 无语言标注的代���块先收集内容
         codeBlockLines.push(line);
       }
     } else {
@@ -905,8 +870,7 @@ function preprocessContent(content: string): string {
   // 处理未闭合的代码块
   if (inCodeBlock && !hasLanguageTag && codeBlockLines.length > 0) {
     console.warn("Unclosed code block detected");
-    const detectedLang = detectCodeLanguage(codeBlockLines.join("\n"));
-    result.push("```" + detectedLang);
+    result.push("```");
     result.push(...codeBlockLines);
     result.push("```");
   }
