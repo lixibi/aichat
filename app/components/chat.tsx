@@ -3134,7 +3134,7 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
                 (1000 * completionTokens!) /
                 (totalReplyLatency! - firstReplyLatency!)
               ).toFixed(2);
-              return `⚡ ${speed} T/s ⏱️ FT:${ttft}s | TT:${latency}s`;
+              return `⚡ ${speed} T/s`;
             } else {
               const speed = (
                 (1000 * completionTokens!) /
