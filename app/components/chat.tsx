@@ -3080,10 +3080,13 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
     }
   };
   const formatMessage = (message: RenderMessage) => {
+    const timeString = message.date.toLocaleTimeString();
     const { statistic } = message;
     const modelName = message.model ? `${message.displayName || message.model}` : "";
 
-    if (!statistic) return modelName;
+    if (!statistic) {
+      return [timeString, modelName].filter(Boolean).join(" - ");
+    }
 
     const { singlePromptTokens, completionTokens, totalReplyLatency } =
       statistic;
@@ -3095,9 +3098,8 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
       tokenCount = singlePromptTokens;
     }
 
-    if (tokenCount === undefined) return modelName;
-
-    const tokenString = `🖥️ ${tokenCount} Tokens`;
+    const tokenString =
+      tokenCount !== undefined ? `🖥️ ${tokenCount} Tokens` : "";
 
     const performanceInfo =
       message.role === "assistant" && totalReplyLatency && completionTokens
@@ -3108,9 +3110,11 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
       .filter(Boolean)
       .join(" - ");
 
-    return isMobileScreen
-      ? `${modelName}\n${statInfo}`
-      : [modelName, statInfo].filter(Boolean).join(" - ");
+    const finalString = [timeString, modelName, statInfo]
+      .filter(Boolean)
+      .join(" - ");
+
+    return isMobileScreen ? finalString.replace(/ - /g, "\n") : finalString;
   };
 
   const enableParamOverride =
