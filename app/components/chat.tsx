@@ -3080,85 +3080,37 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
     }
   };
   const formatMessage = (message: RenderMessage) => {
-    const mainInfo = `${message.date.toLocaleString()}${
-      message.model ? ` - ${message.displayName || message.model}` : ""
-    }`;
     const { statistic } = message;
-    if (!statistic) return mainInfo;
-    const isStreaming =
-      message.isStreamRequest !== undefined
-        ? message.isStreamRequest
-        : statistic &&
-          "firstReplyLatency" in statistic &&
-          statistic.firstReplyLatency !== undefined;
-    const {
-      singlePromptTokens,
-      completionTokens,
-      firstReplyLatency,
-      totalReplyLatency,
-    } = statistic;
+    const modelName = message.model ? `${message.displayName || message.model}` : "";
 
+    if (!statistic) return modelName;
+
+    const { singlePromptTokens, completionTokens, totalReplyLatency } =
+      statistic;
+
+    let tokenCount: number | undefined;
     if (message.role === "assistant") {
-      if (isStreaming) {
-        // For streaming, check all relevant fields
-        if (
-          completionTokens === undefined ||
-          !firstReplyLatency ||
-          !totalReplyLatency
-        ) {
-          return mainInfo;
-        }
-      } else {
-        // For non-streaming, only check completionTokens and totalReplyLatency
-        if (completionTokens === undefined || !totalReplyLatency) {
-          return mainInfo;
-        }
-      }
+      tokenCount = completionTokens;
     } else {
-      // Other roles only need to check prompt tokens
-      if (singlePromptTokens === undefined) return mainInfo;
+      tokenCount = singlePromptTokens;
     }
 
-    const tokenString =
-      message.role === "assistant"
-        ? `${completionTokens} Tokens`
-        : `${singlePromptTokens} Tokens`;
+    if (tokenCount === undefined) return modelName;
+
+    const tokenString = `🖥️ ${tokenCount} Tokens`;
 
     const performanceInfo =
-      message.role === "assistant"
-        ? (() => {
-            if (isStreaming) {
-              const ttft = (firstReplyLatency! / 1000).toFixed(2);
-              const latency = (totalReplyLatency! / 1000).toFixed(2);
-              const speed = (
-                (1000 * completionTokens!) /
-                (totalReplyLatency! - firstReplyLatency!)
-              ).toFixed(2);
-              return `⚡ ${speed} T/s`;
-            } else {
-              const speed = (
-                (1000 * completionTokens!) /
-                totalReplyLatency!
-              ).toFixed(2);
-              const latency = (totalReplyLatency! / 1000).toFixed(2);
-              return `⚡ ${speed} T/s ⏱️ ${latency}s (Non-stream)`;
-            }
-          })()
+      message.role === "assistant" && totalReplyLatency && completionTokens
+        ? `⚡ ${((1000 * completionTokens) / totalReplyLatency).toFixed(2)} T/s`
         : "";
 
-    const statInfo = performanceInfo
-      ? `${tokenString} ${performanceInfo}`
-      : tokenString;
+    const statInfo = [tokenString, performanceInfo]
+      .filter(Boolean)
+      .join(" - ");
 
-    return isMobileScreen ? (
-      <>
-        {mainInfo}
-        <br />
-        {statInfo}
-      </>
-    ) : (
-      `${mainInfo} - ${statInfo}`
-    );
+    return isMobileScreen
+      ? `${modelName}\n${statInfo}`
+      : [modelName, statInfo].filter(Boolean).join(" - ");
   };
 
   const enableParamOverride =
