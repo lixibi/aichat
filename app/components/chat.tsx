@@ -1406,13 +1406,13 @@ export function ChatActions(props: {
           isMobileScreen && !showMobileActions ? styles["mobile-collapsed"] : ""
         }`}
       >
-        {!isMobileScreen && (
+        {/* {!isMobileScreen && (
           <ChatAction
             onClick={() => props.setShowShortcutKeyModal(true)}
             text={Locale.Chat.ShortcutKey.Title}
             icon={<ShortcutkeyIcon />}
           />
-        )}
+        )} */}
         {!isMobileScreen && (
           <ChatAction
             onClick={() => {
@@ -1422,13 +1422,13 @@ export function ChatActions(props: {
             icon={<SearchChatIcon />}
           />
         )}
-        <ChatAction
+        {/* <ChatAction
           onClick={() => {
             navigate(Path.CloudBackup);
           }}
           text={Locale.Chat.InputActions.CloudBackup}
           icon={<FileExpressIcon />}
-        />
+        /> */}
         <div
           ref={toolsRef}
           className={clsx(styles["desktop-only"], styles["tool-wrapper"])}
