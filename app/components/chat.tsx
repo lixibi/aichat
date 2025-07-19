@@ -44,9 +44,7 @@ import BottomIcon from "../icons/bottom.svg";
 import StopIcon from "../icons/pause.svg";
 import RobotIcon from "../icons/robot.svg";
 
-import FileExpressIcon from "../icons/cloud.svg";
 import SearchChatIcon from "../icons/zoom.svg";
-import ShortcutkeyIcon from "../icons/shortcutkey.svg";
 import ReloadIcon from "../icons/reload.svg";
 import TranslateIcon from "../icons/translate.svg";
 import OcrIcon from "../icons/ocr.svg";
@@ -1406,13 +1404,6 @@ export function ChatActions(props: {
           isMobileScreen && !showMobileActions ? styles["mobile-collapsed"] : ""
         }`}
       >
-        {/* {!isMobileScreen && (
-          <ChatAction
-            onClick={() => props.setShowShortcutKeyModal(true)}
-            text={Locale.Chat.ShortcutKey.Title}
-            icon={<ShortcutkeyIcon />}
-          />
-        )} */}
         {!isMobileScreen && (
           <ChatAction
             onClick={() => {
@@ -1422,13 +1413,6 @@ export function ChatActions(props: {
             icon={<SearchChatIcon />}
           />
         )}
-        {/* <ChatAction
-          onClick={() => {
-            navigate(Path.CloudBackup);
-          }}
-          text={Locale.Chat.InputActions.CloudBackup}
-          icon={<FileExpressIcon />}
-        /> */}
         <div
           ref={toolsRef}
           className={clsx(styles["desktop-only"], styles["tool-wrapper"])}
@@ -3085,7 +3069,8 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
     const modelName = message.model ? `${message.displayName || message.model}` : "";
 
     if (!statistic) {
-      return [timeString, modelName].filter(Boolean).join(" - ");
+      const parts = [timeString, modelName].filter(Boolean);
+      return isMobileScreen ? parts.join("\n") : parts.join(" - ");
     }
 
     const { singlePromptTokens, completionTokens, totalReplyLatency } =
@@ -3099,22 +3084,25 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
     }
 
     const tokenString =
-      tokenCount !== undefined ? `🖥️ ${tokenCount} Tokens` : "";
+      tokenCount !== undefined && tokenCount > 0 ? `🖥️ ${tokenCount} Tokens` : "";
 
     const performanceInfo =
-      message.role === "assistant" && totalReplyLatency && completionTokens
+      message.role === "assistant" && 
+      totalReplyLatency && 
+      totalReplyLatency > 0 && 
+      completionTokens && 
+      completionTokens > 0
         ? `⚡ ${((1000 * completionTokens) / totalReplyLatency).toFixed(2)} T/s`
         : "";
 
     const statInfo = [tokenString, performanceInfo]
       .filter(Boolean)
-      .join(" - ");
+      .join(isMobileScreen ? "\n" : " - ");
 
-    const finalString = [timeString, modelName, statInfo]
-      .filter(Boolean)
-      .join(" - ");
+    const allParts = [timeString, modelName, statInfo]
+      .filter(Boolean);
 
-    return isMobileScreen ? finalString.replace(/ - /g, "\n") : finalString;
+    return isMobileScreen ? allParts.join("\n") : allParts.join(" - ");
   };
 
   const enableParamOverride =

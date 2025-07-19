@@ -591,6 +591,7 @@ export class ChatGPTApi implements LLMApi {
                 };
               }>;
               if (!choices || choices.length === 0) {
+                console.warn("[OpenAI Stream] Received response with empty choices array");
                 return;
               }
               const reasoning =
