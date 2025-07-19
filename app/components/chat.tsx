@@ -3070,7 +3070,7 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
 
     if (!statistic) {
       const parts = [timeString, modelName].filter(Boolean);
-      return isMobileScreen ? parts.join("\n") : parts.join(" - ");
+      return parts.join(" • ");
     }
 
     const { singlePromptTokens, completionTokens, totalReplyLatency } =
@@ -3084,7 +3084,7 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
     }
 
     const tokenString =
-      tokenCount !== undefined && tokenCount > 0 ? `🖥️ ${tokenCount} Tokens` : "";
+      tokenCount !== undefined && tokenCount > 0 ? `${tokenCount}` : "";
 
     const performanceInfo =
       message.role === "assistant" && 
@@ -3092,17 +3092,13 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
       totalReplyLatency > 0 && 
       completionTokens && 
       completionTokens > 0
-        ? `⚡ ${((1000 * completionTokens) / totalReplyLatency).toFixed(2)} T/s`
+        ? `⚡${((1000 * completionTokens) / totalReplyLatency).toFixed(2)}`
         : "";
 
-    const statInfo = [tokenString, performanceInfo]
-      .filter(Boolean)
-      .join(isMobileScreen ? "\n" : " - ");
-
-    const allParts = [timeString, modelName, statInfo]
+    const parts = [timeString, modelName, tokenString, performanceInfo]
       .filter(Boolean);
 
-    return isMobileScreen ? allParts.join("\n") : allParts.join(" - ");
+    return parts.join(" • ");
   };
 
   const enableParamOverride =
