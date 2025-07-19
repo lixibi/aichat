@@ -3064,7 +3064,7 @@ function ChatComponent({ modelTable }: { modelTable: Model[] }) {
     }
   };
   const formatMessage = (message: RenderMessage) => {
-    const timeString = message.date.toLocaleTimeString();
+    const timeString = new Date(message.date).toLocaleTimeString();
     const { statistic } = message;
     const modelName = message.model ? `${message.displayName || message.model}` : "";
 
