@@ -45,9 +45,7 @@ export function useAllModelsWithCustomProviders() {
             .map((model) => ({
               name: model.name,
               available: true,
-              displayName: `${model.displayName || model.name} | ${
-                provider.name
-              }`,
+              displayName: model.displayName || model.name,
               provider: {
                 id: provider.id,
                 providerName: provider.name,
